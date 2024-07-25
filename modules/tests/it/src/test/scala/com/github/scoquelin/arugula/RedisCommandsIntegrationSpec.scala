@@ -79,6 +79,53 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
     }
 
+    "leveraging RedisListAsyncCommands" should {
+
+      "create, retrieve, and delete values in a list" in {
+        withRedisSingleNodeAndCluster { client =>
+          val key = randomKey("list-key")
+          val values = List("one", "two", "three")
+
+          for {
+            _ <- client.sendCommand(_.lPush(key, values: _*))
+            range <- client.sendCommand(_.lRange(key, 0, -1))
+            count <- client.sendCommand(_.lLen(key))
+            pos <- client.sendCommand(_.lPos(key, "two"))
+            _ <- count shouldBe values.size
+            _ <- range shouldBe values.reverse
+            _ <- pos shouldBe Some(1)
+            popped <- client.sendCommand(_.lPop(key))
+            _ <- popped shouldBe Some("three")
+            popped <- client.sendCommand(_.lPop(key))
+            _ <- popped shouldBe Some("two")
+            popped <- client.sendCommand(_.lPop(key))
+            _ <- popped shouldBe Some("one")
+            popped <- client.sendCommand(_.lPop(key))
+            _ <- popped shouldBe None
+            _ <- client.sendCommand(_.rPush(key, values: _*))
+            range <- client.sendCommand(_.lRange(key, 0, -1))
+            _ = range shouldBe values
+            _ <- client.sendCommand(_.lRem(key, 1, "two"))
+            range <- client.sendCommand(_.lRange(key, 0, -1))
+            _ <- range shouldBe List("one", "three")
+            _ <- client.sendCommand(_.lTrim(key, 0, 0))
+            range <- client.sendCommand(_.lRange(key, 0, -1))
+            _ <- range shouldBe List("one")
+            index <- client.sendCommand(_.lIndex(key, 0))
+            _ <- index shouldBe Some("one")
+            index <- client.sendCommand(_.lIndex(key, 1))
+            _ <- index shouldBe None
+            popped <- client.sendCommand(_.rPop(key))
+            _ <- popped shouldBe Some("one")
+            endState <- client.sendCommand(_.lRange(key, 0, -1))
+            _ <- endState.isEmpty shouldBe true
+
+          } yield succeed
+        }
+      }
+
+    }
+
     "leveraging RedisSortedSetAsyncCommands" should {
 
       "create, retrieve, scan and delete values in a sorted set" in {
