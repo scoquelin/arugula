@@ -17,12 +17,7 @@ lazy val core = (project in file ("modules/core"))
   .settings(
     name := "arugula-core",
     libraryDependencies ++= Seq(
-      "io.lettuce" % "lettuce-core" % "6.3.2.RELEASE",
-      "com.typesafe" % "config" % "1.4.3",
-      "ch.qos.logback" % "logback-classic" % "1.5.6",
-      "org.scalatest" %% "scalatest" % "3.2.19" % Test,
-      "org.mockito" % "mockito-core" % "5.12.0" % Test,
-      "org.scalatestplus" %% "mockito-5-12" % "3.2.19.0" % Test
+      "io.lettuce" % "lettuce-core" % "6.0.0+",
     )
   )
   .dependsOn(api)
@@ -33,7 +28,8 @@ lazy val unitTests = (project in file ("modules/tests/test"))
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.2.19" % Test,
       "org.mockito" % "mockito-core" % "5.12.0" % Test,
-      "org.scalatestplus" %% "mockito-5-12" % "3.2.19.0" % Test
+      "org.scalatestplus" %% "mockito-5-12" % "3.2.19.0" % Test,
+      "ch.qos.logback" % "logback-classic" % "1.5.6",
     )
   )
   .dependsOn(api, core)
