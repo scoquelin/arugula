@@ -88,6 +88,18 @@ class LettuceRedisAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec with M
       }
     }
 
+    "delegate HMSET command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = "OK"
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.hmset(anyString, any[java.util.Map[String, String]]())).thenReturn(mockRedisFuture)
+      testClass.hMSet("key", Map("field1" -> "value1", "field2" -> "value2")).map { _ =>
+        verify(lettuceAsyncCommands).hmset("key", Map("field1" -> "value1", "field2" -> "value2").asJava)
+        succeed
+      }
+    }
+
     "delegate HSETNX command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 

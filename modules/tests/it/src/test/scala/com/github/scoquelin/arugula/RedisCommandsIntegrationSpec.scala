@@ -2,10 +2,10 @@ package com.github.scoquelin.arugula
 
 import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
-
 import scala.concurrent.duration._
 
 class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with Matchers {
+  import RedisCommandsIntegrationSpec.randomKey
 
   "RedisCommandsClient" when {
 
@@ -25,7 +25,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "create, check, retrieve, and delete a key" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey()
           val value = "value"
 
           for {
@@ -51,7 +51,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "create, check, retrieve, and delete a key with expiration" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey("expiring-key")
           val value = "value"
           val expireIn = 30.minutes
 
@@ -83,7 +83,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "create, retrieve, scan and delete values in a sorted set" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey("sorted-set")
 
           for {
             zAdd <- client.sendCommand(_.zAdd(key = key, args = None, ScoreWithValue(1, "one")))
@@ -132,7 +132,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "create, retrieve, and delete a field with a string value for a hash key" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey("hash-key")
           val field = "field"
           val value = "value"
 
@@ -153,13 +153,17 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- deleted shouldBe 1L
             keyExists <- client.sendCommand(_.exists(key))
             _ <- keyExists shouldBe false
+            _ <- client.sendCommand(_.hMSet(key, Map("field1" -> "value1", "field2" -> "value2", "field3" -> "value3")))
+            fieldValues <- client.sendCommand(_.hGetAll(key))
+            _ <- fieldValues shouldBe Map("field1" -> "value1", "field2" -> "value2", "field3" -> "value3")
+
           } yield succeed
         }
       }
 
       "create, retrieve, and delete a field with an integer value for a hash key" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey("int-hash-key")
           val field = "field"
           val value = 1
 
@@ -186,7 +190,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "allow to send a batch of commands using pipeline" in {
         withRedisSingleNodeAndCluster { client =>
-          val key = "key"
+          val key = randomKey("pipeline-key")
           val field = "field"
           val value = "value"
           val expireIn = 30.minutes
@@ -238,7 +242,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       "allow to flush all keys from all databases" in {
         //single node only for now as it produces a random error "READONLY You can't write against a read only replica" (port 7005) with the Redis cluster
         withRedisSingleNode { client =>
-          val key = "key"
+          val key = randomKey()
           val value = "value"
           val field = "field"
           for {
@@ -257,4 +261,8 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     }
 
   }
+}
+
+object RedisCommandsIntegrationSpec{
+  def randomKey(prefix: String = "key"): String = s"$prefix-${java.util.UUID.randomUUID()}"
 }
