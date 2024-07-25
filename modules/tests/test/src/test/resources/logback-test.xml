@@ -1,0 +1,20 @@
+<configuration>
+<!--    <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator">-->
+<!--        <resetJUL>true</resetJUL>-->
+<!--    </contextListener>-->
+
+    <appender name="stdout" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%date{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="stdout"/>
+    </root>
+
+    <logger name="com.github.scoquelin.arugula" level="INFO" />
+    <!-- <logger name="io.lettuce.core" level="DEBUG" /> -->
+    <!-- <logger name="org.testcontainers" level="DEBUG"/> -->
+
+</configuration>

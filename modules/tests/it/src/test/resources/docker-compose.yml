@@ -1,0 +1,69 @@
+version: "3.3"
+
+services:
+  redis-single-node:
+    image: bitnami/redis:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+
+  redis-node-0:
+    image: bitnami/redis-cluster:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=7000'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+    ports:
+      - '7000:7000'
+
+  redis-node-1:
+    image: bitnami/redis-cluster:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=7001'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+    ports:
+      - '7001:7001'
+
+  redis-node-2:
+    image: bitnami/redis-cluster:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=7002'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+    ports:
+      - '7002:7002'
+
+  redis-node-3:
+    image: bitnami/redis-cluster:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=7003'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+    ports:
+      - '7003:7003'
+
+  redis-node-4:
+    image: bitnami/redis-cluster:7.2
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_PORT_NUMBER=7004'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+    ports:
+      - '7004:7004'
+
+  redis-cluster:
+    image: bitnami/redis-cluster:7.2
+    depends_on:
+      - redis-node-0
+      - redis-node-1
+      - redis-node-2
+      - redis-node-3
+      - redis-node-4
+    environment:
+      - 'ALLOW_EMPTY_PASSWORD=yes'
+      - 'REDIS_CLUSTER_REPLICAS=1'
+      - 'REDIS_PORT_NUMBER=7005'
+      - 'REDIS_NODES=redis-node-0:7000 redis-node-1:7001 redis-node-2:7002 redis-node-3:7003 redis-node-4:7004 redis-cluster:7005'
+      - 'REDIS_CLUSTER_CREATOR=yes'
+    ports:
+      - '7005:7005'
