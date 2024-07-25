@@ -65,6 +65,9 @@ private[commands] class LettuceRedisAsyncCommands[K, V](connection: RedisConnect
   override def hSet(key: K, field: K, value: V): Future[Boolean] =
     delegateRedisClusterCommandAndLift(_.hset(key, field, value)).map(Boolean2boolean)
 
+  override def hMSet(key: K, values: Map[K, V]): Future[Unit] =
+    delegateRedisClusterCommandAndLift(_.hmset(key, values.asJava)).map(_ => ())
+
   override def hSetNx(key: K, field: K, value: V): Future[Boolean] =
     delegateRedisClusterCommandAndLift(_.hsetnx(key, field, value)).map(Boolean2boolean)
 
