@@ -17,7 +17,7 @@ lazy val core = (project in file ("modules/core"))
   .settings(
     name := "arugula-core",
     libraryDependencies ++= Seq(
-      "io.lettuce" % "lettuce-core" % "6.0.0+",
+      "io.lettuce" % "lettuce-core" % "6.3.+",
     )
   )
   .dependsOn(api)
