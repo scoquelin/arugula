@@ -29,7 +29,7 @@ lazy val unitTests = (project in file ("modules/tests/test"))
       "org.scalatest" %% "scalatest" % "3.2.19" % Test,
       "org.mockito" % "mockito-core" % "5.12.0" % Test,
       "org.scalatestplus" %% "mockito-5-12" % "3.2.19.0" % Test,
-      "ch.qos.logback" % "logback-classic" % "1.5.6",
+      "ch.qos.logback" % "logback-classic" % "1.5.6" % Test,
     )
   )
   .dependsOn(api, core)
@@ -41,7 +41,8 @@ lazy val integrationTests = (project in file ("modules/tests/it"))
     libraryDependencies ++= Seq(
       "org.scalatest" %% "scalatest" % "3.2.19" % Test,
       "com.dimafeng" %% "testcontainers-scala" % "0.41.4" % Test,
-      "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.41.4" % Test
+      "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.41.4" % Test,
+      "ch.qos.logback" % "logback-classic" % "1.5.6" % Test
     )
   )
   .dependsOn(api, core)
