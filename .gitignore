@@ -48,6 +48,9 @@ project/plugins/project/
 .cache
 .lib/
 
+### IDE ###
+.idea/
+
 ### SBT Patch ###
 .bsp/
 
