@@ -1,6 +1,7 @@
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "2.13.14"
+ThisBuild / crossScalaVersions := Seq("2.13.14", "3.3.3")
 
 lazy val root = (project in file("."))
   .settings(
@@ -42,7 +43,7 @@ lazy val integrationTests = (project in file ("modules/tests/it"))
       "org.scalatest" %% "scalatest" % "3.2.19" % Test,
       "com.dimafeng" %% "testcontainers-scala" % "0.41.4" % Test,
       "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.41.4" % Test,
-      "ch.qos.logback" % "logback-classic" % "1.5.6" % Test
+      "ch.qos.logback" % "logback-classic" % "1.5.6" % Test,
     )
   )
   .dependsOn(api, core)

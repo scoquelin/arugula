@@ -33,3 +33,5 @@ jobs:
         run: sbt "unitTests / test"
       - name: Run integration tests
         run: sbt "integrationTests / test"
+      - name: Run all tests using Scala 3
+        run: sbt ";++3.3.3;testAll"
