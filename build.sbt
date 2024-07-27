@@ -47,5 +47,6 @@ lazy val integrationTests = (project in file ("modules/tests/it"))
   )
   .dependsOn(api, core)
 
+addCommandAlias("test", ";unitTests/test")
 addCommandAlias("testAll", ";unitTests/test;integrationTests/test")
 
