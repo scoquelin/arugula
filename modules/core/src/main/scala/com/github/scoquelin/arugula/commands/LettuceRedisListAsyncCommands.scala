@@ -1,11 +1,11 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
-import com.github.scoquelin.arugula.api.commands.RedisListAsyncCommands
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
-private[commands] trait LettuceRedisListAsyncCommands[K, V] extends RedisListAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V]{
+private[arugula] trait LettuceRedisListAsyncCommands[K, V] extends RedisListAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V]{
 
   override def lRem(key: K, count: Long, value: V): Future[Long] =
     delegateRedisClusterCommandAndLift(_.lrem(key, count, value)).map(Long2long)

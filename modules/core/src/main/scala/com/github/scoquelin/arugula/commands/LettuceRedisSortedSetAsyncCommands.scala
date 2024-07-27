@@ -1,15 +1,16 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 
-import com.github.scoquelin.arugula.api.commands.RedisKeyAsyncCommands.ScanCursor
-import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands
-import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands.ZAddOptions.{CH, GT, LT, NX, XX}
-import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScanCursorWithScoredValues, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisKeyAsyncCommands.ScanCursor
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.ZAddOptions.{CH, GT, LT, NX, XX}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScanCursorWithScoredValues, ScoreWithValue, ZAddOptions, ZRange}
 import io.lettuce.core.{Limit, Range, ScanArgs, ScoredValue, ZAddArgs}
 import scala.jdk.CollectionConverters._
 
-private[commands] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSortedSetAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
+
+private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSortedSetAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
   import LettuceRedisSortedSetAsyncCommands.toJavaNumberRange
   override def zAdd(key: K, args: Option[ZAddOptions], values: ScoreWithValue[V]*): Future[Long] = {
     ((args match {

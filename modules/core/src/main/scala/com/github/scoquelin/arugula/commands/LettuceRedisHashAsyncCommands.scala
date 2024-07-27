@@ -1,11 +1,11 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
-import com.github.scoquelin.arugula.api.commands.RedisHashAsyncCommands
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
-private[commands] trait LettuceRedisHashAsyncCommands[K, V] extends RedisHashAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V]{
+private[arugula] trait LettuceRedisHashAsyncCommands[K, V] extends RedisHashAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V]{
 
   override def hDel(key: K, fields: K*): Future[Long] =
     delegateRedisClusterCommandAndLift(_.hdel(key, fields: _*)).map(Long2long)

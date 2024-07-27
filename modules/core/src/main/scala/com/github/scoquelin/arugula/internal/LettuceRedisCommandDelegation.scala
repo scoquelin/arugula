@@ -1,4 +1,4 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.internal
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -9,7 +9,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * @tparam K The type of the Redis key
  * @tparam V The type of the Redis value
  */
-private[commands] trait LettuceRedisCommandDelegation[K, V] {
+private[arugula] trait LettuceRedisCommandDelegation[K, V] {
   /**
    * Lifts the outcome (RedisFuture[T]) of a Lettuce Redis command into a Scala Future[T]
    *
@@ -17,7 +17,7 @@ private[commands] trait LettuceRedisCommandDelegation[K, V] {
    * @tparam T The type of the returned value inside the io.lettuce.core.RedisFuture[T]
    * @return A Scala Future[T] extracted from the io.lettuce.core.RedisFuture[T]
    */
-  private[commands] def delegateRedisClusterCommandAndLift[T](
+  private[arugula] def delegateRedisClusterCommandAndLift[T](
     command: io.lettuce.core.cluster.api.async.RedisClusterAsyncCommands[K, V] => io.lettuce.core.RedisFuture[T]
   ): Future[T]
 
@@ -25,5 +25,5 @@ private[commands] trait LettuceRedisCommandDelegation[K, V] {
    * The execution context
    * Should be injected by the implementing class
    */
-  private[commands] implicit val executionContext: ExecutionContext
+  private[arugula] implicit val executionContext: ExecutionContext
 }

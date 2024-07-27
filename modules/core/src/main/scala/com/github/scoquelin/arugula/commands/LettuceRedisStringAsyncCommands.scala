@@ -1,13 +1,12 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
-
-import com.github.scoquelin.arugula.api.commands.RedisStringAsyncCommands
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
 import java.util.concurrent.TimeUnit
 
-private[commands] trait LettuceRedisStringAsyncCommands[K, V] extends RedisStringAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
+private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisStringAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
   override def get(key: K): Future[Option[V]] =
     delegateRedisClusterCommandAndLift(_.get(key)).map(Option.apply)
 

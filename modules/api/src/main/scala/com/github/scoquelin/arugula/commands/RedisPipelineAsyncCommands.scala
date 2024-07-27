@@ -1,6 +1,8 @@
-package com.github.scoquelin.arugula.api.commands
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
+
+import com.github.scoquelin.arugula.RedisCommandsClient
 
 /**
  * Asynchronous pipeline (batch of async commands) implementation
@@ -9,5 +11,5 @@ import scala.concurrent.Future
  * @tparam V The value type
  */
 trait RedisPipelineAsyncCommands[K, V] {
-  def pipeline(commands: RedisAsyncCommands[K, V] => List[Future[Any]]): Future[Option[List[Any]]]
+  def pipeline(commands: RedisCommandsClient[K, V] => List[Future[Any]]): Future[Option[List[Any]]]
 }

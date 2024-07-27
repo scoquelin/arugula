@@ -1,13 +1,11 @@
-package com.github.scoquelin.arugula.commands
-
-import com.github.scoquelin.arugula.api.commands.RedisAsyncCommands
-import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZRange}
-import com.github.scoquelin.arugula.connection.RedisConnection
+package com.github.scoquelin.arugula
 
 import scala.concurrent.Future
 import scala.concurrent.duration.{DurationInt, DurationLong}
 import scala.jdk.CollectionConverters._
 
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZRange}
+import com.github.scoquelin.arugula.connection.RedisConnection
 import io.lettuce.core.{RedisFuture, ScoredValue, ScoredValueScanCursor}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, anyLong, anyString, eq => meq}
@@ -18,7 +16,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.concurrent.CompletableFuture
 
-class LettuceRedisAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec with Matchers {
+class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with Matchers {
 
   override type FixtureParam = TestContext
 
@@ -657,7 +655,7 @@ class LettuceRedisAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec with M
       val mockExpireRedisFuture: RedisFuture[java.lang.Boolean] = mockRedisFutureToReturn(true)
       when(lettuceAsyncCommands.expire("userKey", 24.hours.toSeconds)).thenReturn(mockExpireRedisFuture)
 
-      val commands: RedisAsyncCommands[String, String] => List[Future[Any]] = availableCommands => List(
+      val commands: RedisCommandsClient[String, String] => List[Future[Any]] = availableCommands => List(
         availableCommands.hSet("userKey", "sessionId", "token"),
         availableCommands.expire("userKey", 24.hours)
       )
@@ -689,7 +687,7 @@ class LettuceRedisAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec with M
 
     when(redisConnection.async).thenReturn(Future.successful(lettuceAsyncCommands))
 
-    val testClass = new LettuceRedisAsyncCommands[String, String](redisConnection, cluster = false)
+    val testClass = new LettuceRedisCommandsClient[String, String](redisConnection, cluster = false)
   }
 
 }

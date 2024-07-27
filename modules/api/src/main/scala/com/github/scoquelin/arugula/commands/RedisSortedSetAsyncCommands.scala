@@ -1,11 +1,11 @@
-package com.github.scoquelin.arugula.api.commands
+package com.github.scoquelin.arugula.commands
 
-import com.github.scoquelin.arugula.api.commands.RedisKeyAsyncCommands.ScanCursor
-import com.github.scoquelin.arugula.api.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScanCursorWithScoredValues, ScoreWithValue, ZAddOptions, ZRange}
 
 import scala.concurrent.Future
 
 trait RedisSortedSetAsyncCommands[K, V] {
+  import RedisKeyAsyncCommands.ScanCursor
+  import RedisSortedSetAsyncCommands._
   def zAdd(key: K, args: Option[ZAddOptions], values: ScoreWithValue[V]*): Future[Long]
   def zPopMin(key: K, count: Long): Future[List[ScoreWithValue[V]]]
   def zPopMax(key: K, count: Long): Future[List[ScoreWithValue[V]]]
@@ -19,6 +19,8 @@ trait RedisSortedSetAsyncCommands[K, V] {
 }
 
 object RedisSortedSetAsyncCommands {
+  import RedisKeyAsyncCommands.ScanCursor
+
   sealed trait ZAddOptions
   object ZAddOptions {
     case object NX extends ZAddOptions
