@@ -39,7 +39,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             keyValue <- client.get(key)
             _ <- keyValue match {
               case Some(expectedValue) => expectedValue shouldBe value
-              case None => fail
+              case None => fail()
             }
             deleted <- client.del(key)
             _ <- deleted shouldBe 1L
@@ -62,12 +62,12 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             keyValue <- client.get(key)
             _ <- keyValue match {
               case Some(expectedValue) => expectedValue shouldBe value
-              case None => fail
+              case None => fail()
             }
             ttl <- client.ttl(key)
             _ <- ttl match {
               case Some(timeToLive) => assert(timeToLive > (expireIn - 1.minute) && timeToLive <= expireIn)
-              case None => fail
+              case None => fail()
             }
             deleted <- client.del(key)
             _ <- deleted shouldBe 1L
@@ -194,7 +194,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             fieldValue <- client.hGet(key, field)
             _ <- fieldValue match {
               case Some(expectedFieldValue) => expectedFieldValue shouldBe value
-              case None => fail
+              case None => fail()
             }
             deleted <- client.hDel(key, field)
             _ <- deleted shouldBe 1L
@@ -221,7 +221,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             fieldValue <- client.hGet(key, field)
             _ <- fieldValue match {
               case Some(expectedFieldValue) => expectedFieldValue.toInt shouldBe value
-              case None => fail
+              case None => fail()
             }
             deleted <- client.hDel(key, field)
             _ <- deleted shouldBe 1L
@@ -250,14 +250,14 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             ))
             _ <- pipelineOutcome match {
               case Some(operationsOutcome) => operationsOutcome shouldBe List(true, false, true)
-              case None => fail
+              case None => fail()
             }
             keyExists <- client.exists(key)
             _ <- keyExists shouldBe true
             ttl <- client.ttl(key)
             _ <- ttl match {
               case Some(timeToLive) => assert(timeToLive > (expireIn - 1.minute) && timeToLive <= expireIn)
-              case None => fail
+              case None => fail()
             }
           } yield succeed
         }

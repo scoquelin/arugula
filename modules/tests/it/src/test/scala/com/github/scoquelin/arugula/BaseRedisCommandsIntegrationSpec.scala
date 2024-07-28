@@ -1,24 +1,23 @@
 package com.github.scoquelin.arugula
 
-import com.github.scoquelin.arugula.BaseRedisCommandsIntegrationSpec._
-import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
-import scala.jdk.FunctionConverters.enrichAsJavaFunction
-
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import com.dimafeng.testcontainers.{DockerComposeContainer, ExposedService}
+import com.github.scoquelin.arugula.BaseRedisCommandsIntegrationSpec._
+import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
 import io.lettuce.core.internal.HostAndPort
 import io.lettuce.core.resource.{ClientResources, DnsResolvers, MappingSocketAddressResolver}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AsyncWordSpecLike
-import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.testcontainers.containers.wait.strategy.Wait
 
 import java.io.File
+import scala.jdk.FunctionConverters.enrichAsJavaFunction
 
-trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContainerForAll with BeforeAndAfterEach { self: Suite =>
+trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContainerForAll with BeforeAndAfterEach {
   var redisSingleNodeCommandsClient: RedisCommandsClient[String, String] = null
   var redisClusterCommandsClient: RedisCommandsClient[String, String] = null
 
-  override val containerDef = {
+  override val containerDef: DockerComposeContainer.Def = {
     DockerComposeContainer.Def(
       composeFiles = new File("src/test/resources/docker-compose.yml"),
       exposedServices = Seq(
@@ -28,13 +27,13 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
     )
   }
 
-  override def afterContainersStart(container: Containers): Unit = {
-    super.afterContainersStart(container)
+  override def afterContainersStart(containers: Containers): Unit = {
+    super.afterContainersStart(containers)
 
     redisSingleNodeCommandsClient = LettuceRedisCommandsClient(
       LettuceRedisClientConfig(
-        container.getServiceHost(RedisSingleNode, RedisSingleNodePort),
-        container.getServicePort(RedisSingleNode, RedisSingleNodePort)
+        host = containers.getServiceHost(RedisSingleNode, RedisSingleNodePort),
+        port = containers.getServicePort(RedisSingleNode, RedisSingleNodePort)
       )
     )
 
@@ -52,9 +51,9 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
 
     redisClusterCommandsClient = LettuceRedisCommandsClient(
       LettuceRedisClientConfig(
-        container.getServiceHost(RedisClusterNode, RedisClusterPort),
-        container.getServicePort(RedisClusterNode, RedisClusterPort),
-        clientResources
+        host = containers.getServiceHost(RedisClusterNode, RedisClusterPort),
+        port = containers.getServicePort(RedisClusterNode, RedisClusterPort),
+        clientResources = clientResources
       )
     )
   }
