@@ -1,10 +1,7 @@
 package com.github.scoquelin.arugula
 
-import com.github.scoquelin.arugula.api.commands.client.RedisCommandsClient
 import com.github.scoquelin.arugula.BaseRedisCommandsIntegrationSpec._
-import com.github.scoquelin.arugula.commands.client.LettuceRedisCommandsClient
 import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
-
 import scala.jdk.FunctionConverters.enrichAsJavaFunction
 
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
@@ -64,8 +61,8 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
 
   override def afterEach(): Unit = {
     //flushing both redis instances after each test
-    redisSingleNodeCommandsClient.sendCommand(_.flushAll)
-    redisClusterCommandsClient.sendCommand(_.flushAll)
+    redisSingleNodeCommandsClient.flushAll
+    redisClusterCommandsClient.flushAll
   }
 
   def withRedisSingleNode[K, V, A](runTest: RedisCommandsClient[String, String] => A): A = {

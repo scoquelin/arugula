@@ -1,4 +1,6 @@
-package com.github.scoquelin.arugula.api.commands
+package com.github.scoquelin.arugula
+
+import com.github.scoquelin.arugula.commands._
 
 /**
  * This trait is aggregating all the asynchronous commands that need to be supported by the API
@@ -6,7 +8,7 @@ package com.github.scoquelin.arugula.api.commands
  * @tparam K The key type
  * @tparam V The value type
  */
-trait RedisAsyncCommands[K, V]
+trait RedisCommandsClient[K, V]
   extends RedisBaseAsyncCommands[K, V]
   with RedisKeyAsyncCommands[K, V]
   with RedisStringAsyncCommands[K, V]

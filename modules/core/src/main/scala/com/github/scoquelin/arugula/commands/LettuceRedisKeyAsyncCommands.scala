@@ -1,13 +1,12 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
-
-import com.github.scoquelin.arugula.api.commands.RedisKeyAsyncCommands
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
 import java.util.concurrent.TimeUnit
 
-private[commands] trait LettuceRedisKeyAsyncCommands[K, V] extends RedisKeyAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
+private[arugula] trait LettuceRedisKeyAsyncCommands[K, V] extends RedisKeyAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
   import LettuceRedisKeyAsyncCommands.toFiniteDuration
 
   override def del(key: K*): Future[Long] =

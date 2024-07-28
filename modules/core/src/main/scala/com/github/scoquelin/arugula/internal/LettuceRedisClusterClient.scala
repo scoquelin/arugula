@@ -1,4 +1,4 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.internal
 
 import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
@@ -17,7 +17,7 @@ private class LettuceRedisClusterClient(underlying: JRedisClusterClient)(implici
   override def close: Unit = underlying.close()
 }
 
-private[commands] object LettuceRedisClusterClient {
+private[arugula] object LettuceRedisClusterClient {
   def apply(redisClientConfig: LettuceRedisClientConfig)(implicit ec: ExecutionContext): LettuceRedisClient = {
     val client = JRedisClusterClient.create(
       redisClientConfig.clientResources,

@@ -1,10 +1,11 @@
-package com.github.scoquelin.arugula.commands.internal
+package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 
-import com.github.scoquelin.arugula.api.commands.RedisServerAsyncCommands
+import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
-private[commands] trait LettuceRedisServerAsyncCommands[K, V] extends RedisServerAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
+
+private[arugula] trait LettuceRedisServerAsyncCommands[K, V] extends RedisServerAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
 
   override def flushAll: Future[Unit] =
     delegateRedisClusterCommandAndLift(_.flushall()).map(_ => ())
