@@ -38,12 +38,10 @@ private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisString
   override def mGet(keys: K*): Future[ListMap[K, Option[V]]] =
     delegateRedisClusterCommandAndLift(_.mget(keys: _*)).map {
       case null => ListMap.empty
-      case kvs => ListMap(kvs.toArray.collect {
-        case kv if kv.isInstanceOf[KeyValue[_, _]] =>
-          val keyValue = kv.asInstanceOf[KeyValue[K, V]]
-          if (keyValue.hasValue) keyValue.getKey -> Some(keyValue.getValue)
-          else keyValue.getKey -> None
-      }: _*)
+      case kvs => ListMap.from(kvs.asScala.collect {
+        case keyValue =>
+          if (keyValue.hasValue) keyValue.getKey -> Some(keyValue.getValue) else keyValue.getKey -> None
+      })
     }
 
   override def mSet(keyValues: Map[K, V]): Future[Unit] =

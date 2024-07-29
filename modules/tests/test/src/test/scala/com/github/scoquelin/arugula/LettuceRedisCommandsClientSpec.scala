@@ -125,14 +125,13 @@ class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with 
     "delegate MGET command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
-
-      val expectedValue: List[KeyValue[String, String]] = List(KeyValue.fromNullable("key1", "value1"), KeyValue.fromNullable("key2", "value2"))
+      val expectedValue: List[KeyValue[String, String]] = List(KeyValue.fromNullable("key1", "value1"), KeyValue.fromNullable("key2", "value2"), KeyValue.fromNullable("key3", null))
       val mockRedisFuture: RedisFuture[java.util.List[KeyValue[String, String]]] = mockRedisFutureToReturn(expectedValue.asJava)
-      when(lettuceAsyncCommands.mget(anyString, anyString)).thenReturn(mockRedisFuture)
+      when(lettuceAsyncCommands.mget(anyString, anyString, anyString)).thenReturn(mockRedisFuture)
 
-      testClass.mGet("key1", "key2").map { result =>
-        result mustBe ListMap("key1" -> Some("value1"), "key2" -> Some("value2"))
-        verify(lettuceAsyncCommands).mget("key1", "key2")
+      testClass.mGet("key1", "key2", "key3").map { result =>
+        result mustBe ListMap("key1" -> Some("value1"), "key2" -> Some("value2"), "key3" -> None)
+        verify(lettuceAsyncCommands).mget("key1", "key2", "key3")
         succeed
       }
     }
