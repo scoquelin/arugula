@@ -42,6 +42,38 @@ class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with 
       }
     }
 
+    "delegate GETDEL command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = "value"
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.getdel(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.getDel("key").map {
+        case Some(value) =>
+          value mustBe expectedValue
+          verify(lettuceAsyncCommands).getdel("key")
+          succeed
+        case None => fail(s"Value for GETDEL(key) should be \"$expectedValue\"")
+      }
+    }
+
+    "delegate GETSET command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = "value"
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.getset(anyString, anyString)).thenReturn(mockRedisFuture)
+
+      testClass.getSet("key", "value").map {
+        case Some(value) =>
+          value mustBe expectedValue
+          verify(lettuceAsyncCommands).getset("key", "value")
+          succeed
+        case None => fail(s"Value for GETSET(key, value) should be \"$expectedValue\"")
+      }
+    }
+
     "delegate HGET command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
@@ -273,6 +305,77 @@ class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with 
 
       testClass.setNx("key", "value").map { _ =>
         verify(lettuceAsyncCommands).setnx("key", "value")
+        succeed
+      }
+    }
+
+    "delete INCR command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.incr(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.incr("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).incr("key")
+        succeed
+      }
+    }
+
+    "delegate INCRBY command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.incrby(anyString, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.incrBy("key", 2).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).incrby("key", 2)
+        succeed
+      }
+    }
+
+
+    "delegate INCRBYFLOAT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2.5
+      val mockRedisFuture: RedisFuture[java.lang.Double] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.incrbyfloat(anyString, any[Double])).thenReturn(mockRedisFuture)
+
+      testClass.incrByFloat("key", 2.5).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).incrbyfloat("key", 2.5)
+        succeed
+      }
+    }
+
+    "delegate DECR command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.decr(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.decr("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).decr("key")
+        succeed
+      }
+    }
+
+    "delegate DECRBY command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.decrby(anyString, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.decrBy("key", 2).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).decrby("key", 2)
         succeed
       }
     }

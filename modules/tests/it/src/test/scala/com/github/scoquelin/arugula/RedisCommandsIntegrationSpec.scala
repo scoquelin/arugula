@@ -39,12 +39,68 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             keyValue <- client.get(key)
             _ <- keyValue match {
               case Some(expectedValue) => expectedValue shouldBe value
-              case None => fail()
+              case None => fail("Expected value not found")
             }
             deleted <- client.del(key)
             _ <- deleted shouldBe 1L
             keyExists <- client.exists(key)
             _ <- keyExists shouldBe false
+            valuePriorToSet <- client.getSet(key, value)
+            _ <- valuePriorToSet match {
+              case Some(_) => fail("Expected value not found")
+              case None => succeed
+            }
+            priorValue <- client.getDel(key)
+            _ <- priorValue match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+          } yield succeed
+        }
+      }
+
+      "increment and decrement a key" in {
+        withRedisSingleNodeAndCluster { client =>
+          val key = randomKey("increment-key")
+          for {
+            _ <- client.incr(key)
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe "1"
+              case None => fail("Expected value not found")
+            }
+            _ <- client.incrBy(key, 5)
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe "6"
+              case None => fail("Expected value not found")
+            }
+            _ <- client.decr(key)
+
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe "5"
+              case None => fail("Expected value not found")
+            }
+
+            _ <- client.decrBy(key, 3)
+
+            value <- client.get(key)
+
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe "2"
+              case None => fail("Expected value not found")
+            }
+
+            _ <- client.incrByFloat(key, 0.5)
+
+            value <- client.get(key)
+
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe "2.5"
+              case None => fail("Expected value not found")
+            }
+
           } yield succeed
         }
       }

@@ -10,6 +10,12 @@ private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisString
   override def get(key: K): Future[Option[V]] =
     delegateRedisClusterCommandAndLift(_.get(key)).map(Option.apply)
 
+  override def getDel(key: K): Future[Option[V]] =
+    delegateRedisClusterCommandAndLift(_.getdel(key)).map(Option.apply)
+
+  override def getSet(key: K, value: V): Future[Option[V]] =
+    delegateRedisClusterCommandAndLift(_.getset(key, value)).map(Option.apply)
+
   override def set(key: K, value: V): Future[Unit] =
     delegateRedisClusterCommandAndLift(_.set(key, value)).map(_ => ())
 
@@ -23,4 +29,19 @@ private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisString
 
   override def setNx(key: K, value: V): Future[Boolean] =
     delegateRedisClusterCommandAndLift(_.setnx(key, value)).map(Boolean2boolean)
+
+  override def incr(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.incr(key)).map(Long2long)
+
+  override def incrBy(key: K, increment: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.incrby(key, increment)).map(Long2long)
+
+  override def incrByFloat(key: K, increment: Double): Future[Double] =
+    delegateRedisClusterCommandAndLift(_.incrbyfloat(key, increment)).map(Double2double)
+
+  override def decr(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.decr(key)).map(Long2long)
+
+  override def decrBy(key: K, decrement: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.decrby(key, decrement)).map(Long2long)
 }
