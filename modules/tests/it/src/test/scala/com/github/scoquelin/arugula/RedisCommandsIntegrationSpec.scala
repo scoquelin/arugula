@@ -1,8 +1,12 @@
 package com.github.scoquelin.arugula
 
+import scala.collection.immutable.ListMap
+
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
+
+import java.util.concurrent.TimeUnit
 
 class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with Matchers {
   import RedisCommandsIntegrationSpec.randomKey
@@ -118,18 +122,71 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             keyValue <- client.get(key)
             _ <- keyValue match {
               case Some(expectedValue) => expectedValue shouldBe value
-              case None => fail()
+              case None => fail("Expected value not found")
             }
             ttl <- client.ttl(key)
             _ <- ttl match {
               case Some(timeToLive) => assert(timeToLive > (expireIn - 1.minute) && timeToLive <= expireIn)
-              case None => fail()
+              case None => fail("Expected time to live not found")
+            }
+            longDuration = FiniteDuration(3, TimeUnit.DAYS)
+            getExp <- client.getEx(key, longDuration)
+            _ <- getExp match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+            getTtl <- client.ttl(key)
+            _ <- getTtl match {
+              case Some(timeToLive) => assert(timeToLive > (longDuration - 1.minute) && timeToLive <= longDuration)
+              case None => fail("Expected time to live not found")
             }
             deleted <- client.del(key)
             _ <- deleted shouldBe 1L
             keyExists <- client.exists(key)
             _ <- keyExists shouldBe false
           } yield succeed
+        }
+      }
+
+      "support string range operations" in {
+        withRedisSingleNodeAndCluster { client =>
+          val key = randomKey("range-key")
+          for {
+            lenResult <- client.append(key, "Hello")
+            _ = lenResult shouldBe 5L
+            lenResult <- client.append(key, ", World!")
+            _ = lenResult shouldBe 13L
+            range <- client.getRange(key, 0, 4)
+            _ = range shouldBe Some("Hello")
+            range <- client.getRange(key, -6, -1)
+            _ = range shouldBe Some("World!")
+            _ = client.setRange(key, 7, "Redis")
+            updatedValue <- client.get(key)
+            _ = updatedValue shouldBe Some("Hello, Redis!")
+            strLen <- client.strLen(key)
+            _ = strLen shouldBe 13L
+          } yield succeed
+
+        }
+      }
+
+      "support multiple key operations" in {
+        withRedisSingleNodeAndCluster { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("k1") + suffix
+          val key2 = randomKey("k2") + suffix
+          val key3 = randomKey("k3") + suffix
+          val key4 = randomKey("k4") + suffix
+          for {
+            _ <- client.mSet(Map(key1 -> "value1", key2 -> "value2", key3 -> "value3"))
+            values <- client.mGet(key1, key2, key3, key4)
+            _ <- values shouldBe ListMap(key1 -> Some("value1"), key2 -> Some("value2"), key3 -> Some("value3"), key4 -> None)
+            nxResult <- client.mSetNx(Map(key4 -> "value4"))
+            _ = nxResult shouldBe true
+            values <- client.mGet(key1, key2, key3, key4)
+            _ = values shouldBe ListMap(key1 -> Some("value1"), key2 -> Some("value2"), key3 -> Some("value3"), key4 -> Some("value4"))
+          } yield succeed
+
         }
       }
 
