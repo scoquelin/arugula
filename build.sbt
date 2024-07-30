@@ -1,3 +1,23 @@
+inThisBuild(List(
+  organization := "io.github.scoquelin",
+  homepage := Some(url("https://github.com/scoquelin/arugula")),
+  licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
+  developers := List(
+    Developer(
+      "scoquelin",
+      "Sébastien Coquelin",
+      "seb.coquelin at gmail.com",
+      url("https://www.github.com/scoquelin")
+    ),
+    Developer(
+      "72squared",
+      "John Loehrer",
+      "72squared at gmail.com",
+      url("https://www.github.com/72squared")
+    )
+  )
+))
+
 ThisBuild / version := "0.1.0-SNAPSHOT"
 
 ThisBuild / scalaVersion := "2.13.14"
