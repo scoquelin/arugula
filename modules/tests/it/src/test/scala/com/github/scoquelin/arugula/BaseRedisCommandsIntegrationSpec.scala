@@ -54,7 +54,7 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
         clientResources = clientResources
     )
 
-    cachedClients = RedisCommandCachedClients(redisSingleNodeConfig, redisClusterConfig)
+    cachedClients = RedisCommandsCachedClients(redisSingleNodeConfig, redisClusterConfig)
   }
 
   override def afterEach(): Unit = {
