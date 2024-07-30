@@ -3,6 +3,7 @@ package com.github.scoquelin.arugula
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import com.dimafeng.testcontainers.{DockerComposeContainer, ExposedService}
 import com.github.scoquelin.arugula.BaseRedisCommandsIntegrationSpec._
+import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
 import io.lettuce.core.internal.HostAndPort
 import io.lettuce.core.resource.{ClientResources, DnsResolvers, MappingSocketAddressResolver}
@@ -11,11 +12,11 @@ import org.scalatest.wordspec.AsyncWordSpecLike
 import org.testcontainers.containers.wait.strategy.Wait
 
 import java.io.File
+import scala.concurrent.Future
 import scala.jdk.FunctionConverters.enrichAsJavaFunction
 
 trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContainerForAll with BeforeAndAfterEach {
-  var redisSingleNodeCommandsClient: RedisCommandsClient[String, String] = null
-  var redisClusterCommandsClient: RedisCommandsClient[String, String] = null
+  var cachedClients: CachedClients = null
 
   override val containerDef: DockerComposeContainer.Def = {
     DockerComposeContainer.Def(
@@ -30,11 +31,9 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
   override def afterContainersStart(containers: Containers): Unit = {
     super.afterContainersStart(containers)
 
-    redisSingleNodeCommandsClient = LettuceRedisCommandsClient(
-      LettuceRedisClientConfig(
-        host = containers.getServiceHost(RedisSingleNode, RedisSingleNodePort),
-        port = containers.getServicePort(RedisSingleNode, RedisSingleNodePort)
-      )
+    val redisSingleNodeConfig = LettuceRedisClientConfig(
+      host = containers.getServiceHost(RedisSingleNode, RedisSingleNodePort),
+      port = containers.getServicePort(RedisSingleNode, RedisSingleNodePort)
     )
 
     //Special hack to get cluster client topology refresh working since we need direct connectivity to cluster nodes see https://github.com/lettuce-io/lettuce-core/issues/941
@@ -49,33 +48,39 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
     val resolver = MappingSocketAddressResolver.create(DnsResolvers.UNRESOLVED, mapHostAndPort.asJavaFunction)
     val clientResources = ClientResources.builder.socketAddressResolver(resolver).build
 
-    redisClusterCommandsClient = LettuceRedisCommandsClient(
-      LettuceRedisClientConfig(
+    val redisClusterConfig = LettuceRedisClientConfig(
         host = containers.getServiceHost(RedisClusterNode, RedisClusterPort),
         port = containers.getServicePort(RedisClusterNode, RedisClusterPort),
         clientResources = clientResources
-      )
     )
+
+    cachedClients = RedisCommandCachedClients(redisSingleNodeConfig, redisClusterConfig)
   }
 
   override def afterEach(): Unit = {
     //flushing both redis instances after each test
-    redisSingleNodeCommandsClient.flushAll
-    redisClusterCommandsClient.flushAll
+    cachedClients.getClient(RedisCodec.Utf8WithValueAsStringCodec, SingleNode).flushAll
+    cachedClients.getClient(RedisCodec.Utf8WithValueAsStringCodec, Cluster).flushAll
   }
 
-  def withRedisSingleNode[K, V, A](runTest: RedisCommandsClient[String, String] => A): A = {
-    withContainers(_ => runTest(redisSingleNodeCommandsClient))
-  }
-
-  def withRedisCluster[K, V, A](runTest: RedisCommandsClient[String, String] => A): A = {
-    withContainers(_ => runTest(redisClusterCommandsClient))
-  }
-
-  def withRedisSingleNodeAndCluster[K, V, A](runTest: RedisCommandsClient[String, String] => A): A = {
+  def withRedisSingleNode[K, V, A](codec: RedisCodec[K, V])(runTest: RedisCommandsClient[K, V] => Future[A]): Future[A] = {
     withContainers(_ => {
-      runTest(redisSingleNodeCommandsClient)
-      runTest(redisClusterCommandsClient)
+      runTest(cachedClients.getClient(codec, SingleNode))
+    })
+  }
+
+  def withRedisCluster[K, V, A](codec: RedisCodec[K, V])(runTest: RedisCommandsClient[K, V] => Future[A]): Future[A] = {
+    withContainers(_ => {
+      runTest(cachedClients.getClient(codec, Cluster))
+    })
+  }
+
+  def withRedisSingleNodeAndCluster[K, V, A](codec: RedisCodec[K, V])(runTest: RedisCommandsClient[K, V] => Future[A]): Future[A] = {
+    withContainers(_ => {
+      for {
+        _ <- runTest(cachedClients.getClient(codec, SingleNode))
+        outcome <- runTest(cachedClients.getClient(codec, Cluster))
+      } yield outcome
     })
   }
 

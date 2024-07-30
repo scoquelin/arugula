@@ -2,8 +2,10 @@ package com.github.scoquelin.arugula
 
 import scala.collection.immutable.ListMap
 
+import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
+
 import scala.concurrent.duration._
 
 import java.util.concurrent.TimeUnit
@@ -16,7 +18,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisBaseAsyncCommands" should {
 
       "ping" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           for {
             response <- client.ping
             _ <- response shouldBe "PONG"
@@ -27,8 +29,44 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
     "leveraging RedisStringAsyncCommands" should {
 
-      "create, check, retrieve, and delete a key" in {
-        withRedisSingleNodeAndCluster { client =>
+      "create, check, retrieve, and delete a key holding a Long value" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsLongCodec) { client =>
+          val key = randomKey()
+          val value = 1L
+
+          for {
+            _ <- client.set(key, value)
+            keyExists <- client.exists(key)
+            _ <- keyExists shouldBe true
+            existingKeyAdded <- client.setNx(key, value) //noop since key already exists
+            _ <- existingKeyAdded shouldBe false
+            newKeyAdded <- client.setNx("newKey", value)
+            _ <- newKeyAdded shouldBe true
+            keyValue <- client.get(key)
+            _ <- keyValue match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+            deleted <- client.del(key)
+            _ <- deleted shouldBe 1L
+            keyExists <- client.exists(key)
+            _ <- keyExists shouldBe false
+            valuePriorToSet <- client.getSet(key, value)
+            _ <- valuePriorToSet match {
+              case Some(_) => fail("Expected value not found")
+              case None => succeed
+            }
+            priorValue <- client.getDel(key)
+            _ <- priorValue match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+          } yield succeed
+        }
+      }
+
+      "create, check, retrieve, and delete a key holding a String value" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey()
           val value = "value"
 
@@ -63,8 +101,45 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         }
       }
 
-      "increment and decrement a key" in {
-        withRedisSingleNodeAndCluster { client =>
+      "increment and decrement a key holding a Long value" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsLongCodec) { client =>
+          val key = randomKey("increment-key")
+          for {
+            _ <- client.incr(key)
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe 1
+              case None => fail("Expected value not found")
+            }
+            _ <- client.incrBy(key, 5)
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe 6
+              case None => fail("Expected value not found")
+            }
+            _ <- client.decr(key)
+
+            value <- client.get(key)
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe 5
+              case None => fail("Expected value not found")
+            }
+
+            _ <- client.decrBy(key, 3)
+
+            value <- client.get(key)
+
+            _ <- value match {
+              case Some(expectedValue) => expectedValue shouldBe 2
+              case None => fail("Expected value not found")
+            }
+
+          } yield succeed
+        }
+      }
+
+      "increment and decrement a key holding a String value" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("increment-key")
           for {
             _ <- client.incr(key)
@@ -110,7 +185,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
 
       "create, check, retrieve, and delete a key with expiration" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("expiring-key")
           val value = "value"
           val expireIn = 30.minutes
@@ -149,7 +224,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
 
       "support string range operations" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("range-key")
           for {
             lenResult <- client.append(key, "Hello")
@@ -171,7 +246,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
 
       "support multiple key operations" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val suffix = "{user1}"
           val key1 = randomKey("k1") + suffix
           val key2 = randomKey("k2") + suffix
@@ -195,7 +270,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisListAsyncCommands" should {
 
       "create, retrieve, and delete values in a list" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("list-key")
           val values = List("one", "two", "three")
 
@@ -242,7 +317,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisSortedSetAsyncCommands" should {
 
       "create, retrieve, scan and delete values in a sorted set" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("sorted-set")
 
           for {
@@ -291,7 +366,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisHashAsyncCommands" should {
 
       "create, retrieve, and delete a field with a string value for a hash key" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("hash-key")
           val field = "field"
           val value = "value"
@@ -322,7 +397,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
 
       "create, retrieve, and delete a field with an integer value for a hash key" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("int-hash-key")
           val field = "field"
           val value = 1
@@ -349,7 +424,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisPipelineAsyncCommands" should {
 
       "allow to send a batch of commands using pipeline" in {
-        withRedisSingleNodeAndCluster { client =>
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("pipeline-key")
           val field = "field"
           val value = "value"
@@ -380,7 +455,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
     "leveraging RedisServerAsyncCommands" should {
 
       "allow to get information from server and retrieve at least 199 keys (single-node)" in {
-        withRedisSingleNode { client =>
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           for {
             info <- client.info
             _ <- info.isEmpty shouldBe false
@@ -390,7 +465,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
 
       "allow to get information from server and retrieve at least 200 keys (cluster)" in {
-        withRedisCluster { client =>
+        withRedisCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           for {
             info <- client.info
             _ <- info.isEmpty shouldBe false
@@ -401,7 +476,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "allow to flush all keys from all databases" in {
         //single node only for now as it produces a random error "READONLY You can't write against a read only replica" (port 7005) with the Redis cluster
-        withRedisSingleNode { client =>
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey()
           val value = "value"
           val field = "field"

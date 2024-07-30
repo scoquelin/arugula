@@ -441,7 +441,7 @@ class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with 
       }
     }
 
-    "delete INCR command to Lettuce and lift result into a Future" in { testContext =>
+    "delegate INCR command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
       val expectedValue = 1L

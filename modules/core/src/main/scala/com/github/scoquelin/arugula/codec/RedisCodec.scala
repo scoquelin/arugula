@@ -9,7 +9,7 @@ object RedisCodec {
   val Utf8WithValueAsLongCodec: RedisCodec[String, Long] = RedisCodec(LongCodec)
 }
 
-private object LongCodec extends JRedisCodec[String, Long] with ToByteBufEncoder[String, Long] {
+private[arugula] object LongCodec extends JRedisCodec[String, Long] with ToByteBufEncoder[String, Long] {
 
   import java.nio.ByteBuffer
   import io.netty.buffer.ByteBuf
