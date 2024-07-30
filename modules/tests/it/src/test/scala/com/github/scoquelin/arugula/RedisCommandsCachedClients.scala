@@ -1,9 +1,8 @@
 package com.github.scoquelin.arugula
 
-import com.github.scoquelin.arugula.codec.RedisCodec
-import com.github.scoquelin.arugula.codec.LongCodec
+import com.github.scoquelin.arugula.codec.{LongCodec, RedisCodec}
 import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
-import io.lettuce.core.codec.{StringCodec => JStringCodec, RedisCodec => JRedisCodec}
+import io.lettuce.core.codec.{StringCodec => JStringCodec}
 
 import scala.concurrent.ExecutionContext
 
@@ -17,12 +16,12 @@ trait CachedClients {
   def getClient[K, V](codec: RedisCodec[K, V], connectionType: RedisConnectionType): RedisCommandsClient[K, V]
 }
 
-private class RedisCommandCachedClients(redisSingleNodeClientWithStringValue: RedisCommandsClient[String, String],
-                                        redisSingleNodeClientWithLongValue: RedisCommandsClient[String, Long],
-                                        redisClusterClientWithStringValue: RedisCommandsClient[String, String],
-                                        redisClusterClientWithLongValue: RedisCommandsClient[String, Long]) extends CachedClients {
+private class RedisCommandsCachedClients(redisSingleNodeClientWithStringValue: RedisCommandsClient[String, String],
+                                         redisSingleNodeClientWithLongValue: RedisCommandsClient[String, Long],
+                                         redisClusterClientWithStringValue: RedisCommandsClient[String, String],
+                                         redisClusterClientWithLongValue: RedisCommandsClient[String, Long]) extends CachedClients {
 
-  def getClient[K, V](codec: RedisCodec[K, V], connectionType: RedisConnectionType): RedisCommandsClient[K, V] = {
+  override def getClient[K, V](codec: RedisCodec[K, V], connectionType: RedisConnectionType): RedisCommandsClient[K, V] = {
     (codec, connectionType) match {
       case (RedisCodec(JStringCodec.UTF8), SingleNode) => redisSingleNodeClientWithStringValue.asInstanceOf[RedisCommandsClient[K, V]]
       case (RedisCodec(JStringCodec.UTF8), Cluster) => redisClusterClientWithStringValue.asInstanceOf[RedisCommandsClient[K, V]]
@@ -33,13 +32,13 @@ private class RedisCommandCachedClients(redisSingleNodeClientWithStringValue: Re
   }
 }
 
-object RedisCommandCachedClients {
+object RedisCommandsCachedClients {
   def apply(singleNodeConfig: LettuceRedisClientConfig, clusterConfig: LettuceRedisClientConfig)(implicit ec: ExecutionContext): CachedClients = {
     val redisSingleNodeClientWithStringValue = LettuceRedisCommandsClient(singleNodeConfig, RedisCodec.Utf8WithValueAsStringCodec)
     val redisSingleNodeClientWithLongValue = LettuceRedisCommandsClient(singleNodeConfig, RedisCodec.Utf8WithValueAsLongCodec)
     val redisClusterClientWithStringValue = LettuceRedisCommandsClient(clusterConfig, RedisCodec.Utf8WithValueAsStringCodec)
     val redisClusterClientWithLongValue = LettuceRedisCommandsClient(clusterConfig, RedisCodec.Utf8WithValueAsLongCodec)
-    new RedisCommandCachedClients(
+    new RedisCommandsCachedClients(
       redisSingleNodeClientWithStringValue,
       redisSingleNodeClientWithLongValue,
       redisClusterClientWithStringValue,
