@@ -4,6 +4,8 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
+import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.BitFieldCommand
+
 /**
  * Asynchronous commands for manipulating/querying Strings
  *
@@ -19,6 +21,108 @@ trait RedisStringAsyncCommands[K, V] {
    * @return The length of the string after the append operation
    */
   def append(key: K, value: V): Future[Long]
+
+  /**
+   * Count the number of set bits (population counting) in a string.
+   */
+  def bitCount(key: K): Future[Long]
+
+  /**
+   * Count the number of set bits (population counting) in a string.
+   * @param key The key
+   * @param start The start index
+   * @param end The end index
+   * @return The number of bits set to 1
+   */
+  def bitCount(key: K, start: Long, end: Long): Future[Long]
+
+  /**
+   * Perform arbitrary bitfield integer operations on strings.
+   * Use the BitFieldCommand object convenience methods to create the commands.
+   * Example:
+   * {{{
+   *  val commands = Seq(
+   *    BitFieldCommand.set(BitFieldDataType.Unsigned(8), 1),
+   *    BitFieldCommand.incrBy(BitFieldDataType.Unsigned(8), 1),
+   *    BitFieldCommand.get(BitFieldDataType.Unsigned(8)),
+   *    BitFieldCommand.overflowSat(BitFieldDataType.Unsigned(8))
+   *  )
+   *  bitField("key", commands)
+   *  }}}
+   * @param key The key
+   * @param commands The commands
+   * @return The length of the string stored in the destination key
+   */
+  def bitField(key: K, commands: Seq[BitFieldCommand]): Future[Seq[Long]]
+
+  /**
+   * Perform bitwise AND between strings.
+   * @param destination The destination key
+   * @param keys The keys
+   * @return The length of the string stored in the destination key
+   */
+  def bitOpAnd(destination: K, keys: K*): Future[Long]
+
+
+  /**
+   * Perform bitwise OR between strings.
+   * @param destination The destination key
+   * @param keys The keys
+   * @return The length of the string stored in the destination key
+   */
+  def bitOpOr(destination: K, keys: K*): Future[Long]
+
+  /**
+   * Perform bitwise XOR between strings.
+   * @param destination The destination key
+   * @param keys The keys
+   * @return The length of the string stored in the destination key
+   */
+  def bitOpXor(destination: K, keys: K*): Future[Long]
+
+
+  /**
+   * Perform bitwise NOT between strings.
+   * @param destination The destination key
+   * @param key The key
+   * @return The length of the string stored in the destination key
+   */
+  def bitOpNot(destination: K, key: K): Future[Long]
+
+  /**
+   * Find first bit set or clear in a string.
+   * @param key The key
+   * @param state The state
+   * @return The command returns the position of the first bit set to 1 or 0 according to the request.
+   */
+  def bitPos(key: K, state:Boolean): Future[Long]
+
+  /**
+   * Find first bit set or clear in a string.
+   * @param key The key
+   * @param state The state
+   * @param start The start index
+   * @return The command returns the position of the first bit set to 1 or 0 according to the request.
+   */
+  def bitPos(key: K, state: Boolean, start: Long): Future[Long]
+
+  /**
+   * Find first bit set or clear in a string.
+   * @param key The key
+   * @param state The state
+   * @param start The start index
+   * @param end The end index
+   * @return The command returns the position of the first bit set to 1 or 0 according to the request.
+   */
+  def bitPos(key: K, state: Boolean, start: Long, end: Long): Future[Long]
+
+  /**
+   * Get the bit value at offset in the string value stored at key.
+   * @param key The key
+   * @param offset The offset
+   * @return The bit value stored at offset
+   */
+  def getBit(key: K, offset: Long): Future[Long]
 
   /**
    * Get the value of a key.
@@ -89,6 +193,15 @@ trait RedisStringAsyncCommands[K, V] {
    * @return Unit
    */
   def set(key: K, value: V): Future[Unit]
+
+  /**
+   * Set or clear the bit at offset in the string value stored at key.
+   * @param key The key
+   * @param offset The offset
+   * @param value The value
+   * @return The original bit value stored at offset
+   */
+  def setBit(key: K, offset: Long, value: Int): Future[Long]
 
   /**
    * Set the value and expiration of a key.
@@ -162,15 +275,42 @@ trait RedisStringAsyncCommands[K, V] {
 
 
   /*** commands that are not yet implemented ***/
-  // def bitCount(key: K, start: Option[Long] = None, end: Option[Long] = None): Future[Long]
-  // def bitOpAnd(destination: K, keys: K*): Future[Long]
-  // def bitOpOr(destination: K, keys: K*): Future[Long]
-  // def bitOpXor(destination: K, keys: K*): Future[Long]
-  // def bitOpNot(destination: K, key: K): Future[Long]
-  // def bitPos(key: K, bit: Boolean, start: Option[Long] = None, end: Option[Long] = None): Future[Long]
-  // def bitField(key: K, command: String, offset: Long, value: Option[Long] = None): Future[Long]
   // def strAlgoLcs(keys: K*): Future[Option[V]]
-  // def getBit(key: K, offset: Long): Future[Boolean]
-  // def setBit(key: K, offset: Long, value: Boolean): Future[Boolean]
+}
 
+
+
+object RedisStringAsyncCommands {
+
+  sealed trait BitFieldOperation
+
+  object BitFieldOperation {
+    case object Get extends BitFieldOperation
+    case object Set extends BitFieldOperation
+    case object Incrby extends BitFieldOperation
+    case object OverflowWrap extends BitFieldOperation
+    case object OverflowSat extends BitFieldOperation
+    case object OverflowFail extends BitFieldOperation
+  }
+
+  sealed trait BitFieldDataType
+
+  object BitFieldDataType {
+    final case class Signed(width: Int) extends BitFieldDataType
+    final case class Unsigned(width: Int) extends BitFieldDataType
+  }
+
+  final case class BitFieldCommand(operation: BitFieldOperation, dataType: BitFieldDataType, offset: Option[Int] = None, value: Option[Long] = None)
+
+  object BitFieldCommand {
+    def set(bitFieldType: BitFieldDataType, value: Long): BitFieldCommand = BitFieldCommand(BitFieldOperation.Set, bitFieldType, None, Some(value))
+    def set(bitFieldType: BitFieldDataType, value: Long, offset: Int): BitFieldCommand = BitFieldCommand(BitFieldOperation.Set, bitFieldType, Some(offset), Some(value))
+    def get(bitFieldType: BitFieldDataType): BitFieldCommand = BitFieldCommand(BitFieldOperation.Get, bitFieldType)
+    def get(bitFieldType: BitFieldDataType, offset: Int): BitFieldCommand = BitFieldCommand(BitFieldOperation.Get, bitFieldType, Some(offset))
+    def incrBy(bitFieldType: BitFieldDataType, value: Long): BitFieldCommand = BitFieldCommand(BitFieldOperation.Incrby, bitFieldType, None, Some(value))
+    def incrBy(bitFieldType: BitFieldDataType, value: Long, offset: Int): BitFieldCommand = BitFieldCommand(BitFieldOperation.Incrby, bitFieldType, Some(offset), Some(value))
+    def overflowWrap(bitFieldType: BitFieldDataType): BitFieldCommand = BitFieldCommand(BitFieldOperation.OverflowWrap, bitFieldType)
+    def overflowSat(bitFieldType: BitFieldDataType): BitFieldCommand = BitFieldCommand(BitFieldOperation.OverflowSat, bitFieldType)
+    def overflowFail(bitFieldType: BitFieldDataType): BitFieldCommand = BitFieldCommand(BitFieldOperation.OverflowFail, bitFieldType)
+  }
 }

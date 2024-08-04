@@ -8,6 +8,8 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 
+import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
+
 import java.util.concurrent.TimeUnit
 
 class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with Matchers {
@@ -242,6 +244,52 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ = strLen shouldBe 13L
           } yield succeed
 
+        }
+      }
+
+      "support bit operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("bit-key1") + suffix
+          val key2 = randomKey("bit-key2") + suffix
+          for {
+            bitSet <- client.setBit(key1, 0, 1)
+            _ <- bitSet shouldBe 0L
+            bitSet <- client.setBit(key1, 0, 0)
+            _ <- bitSet shouldBe 1L
+            bitSet <- client.setBit(key1, 0, 1)
+            _ <- bitSet shouldBe 0L
+            bitSet <- client.setBit(key1, 0, 1)
+            _ <- bitSet shouldBe 1L
+            bitGet <- client.getBit(key1, 0)
+            _ <- bitGet shouldBe 1L
+            bitGet <- client.getBit(key1, 1)
+            _ <- bitGet shouldBe 0L
+            bitCount <- client.bitCount(key1)
+            _ <- bitCount shouldBe 1L
+            bitFieldResult <- client.bitField(key1, Seq(
+              BitFieldCommand.set(BitFieldDataType.Unsigned(8), 1),
+              BitFieldCommand.get(BitFieldDataType.Unsigned(8), 1),
+              BitFieldCommand.incrBy(BitFieldDataType.Unsigned(8), 1, 1),
+              BitFieldCommand.get(BitFieldDataType.Unsigned(8), 1),
+            ))
+            _ <- bitFieldResult shouldBe Seq(128, 2, 3, 3)
+            _ <- client.setBit(key2, 0, 1)
+            bitOpAnd <- client.bitOpAnd(key1, key2)
+            _ <- bitOpAnd shouldBe 1L
+            bitOpOr <- client.bitOpOr(key1, key2)
+            _ <- bitOpOr shouldBe 1L
+            bitOpXor <- client.bitOpXor(key1, key2)
+            _ <- bitOpXor shouldBe 1L
+            bitOpNot <- client.bitOpNot(key1, key2)
+            _ <- bitOpNot shouldBe 1L
+            bitGet <- client.getBit(key1, 0)
+            _ <- bitGet shouldBe 0L
+            posBit <- client.bitPos(key1, state = true)
+            _ <- posBit shouldBe 1L
+            posBit <- client.bitPos(key1, state = false)
+            _ <- posBit shouldBe 0L
+          } yield succeed
         }
       }
 
