@@ -5,8 +5,9 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 
+import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType, BitFieldOperation}
 import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
-import io.lettuce.core.{GetExArgs, KeyValue}
+import io.lettuce.core.{BitFieldArgs, GetExArgs, KeyValue}
 
 import java.util.concurrent.TimeUnit
 
@@ -14,6 +15,80 @@ private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisString
 
   override def append(key: K, value: V): Future[Long] =
     delegateRedisClusterCommandAndLift(_.append(key, value)).map(Long2long)
+
+  override def bitCount(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitcount(key)).map(Long2long)
+
+  override def bitCount(key: K, start: Long, end: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitcount(key, start, end)).map(Long2long)
+
+  override def bitField(key: K, commands: Seq[BitFieldCommand]): Future[Seq[Long]] = {
+    val args = new BitFieldArgs()
+
+    commands.foreach{ command =>
+      val bitFieldType = command.dataType match {
+        case BitFieldDataType.Signed(width) => BitFieldArgs.signed(width)
+        case BitFieldDataType.Unsigned(width) => BitFieldArgs.unsigned(width)
+      }
+      command match {
+        case BitFieldCommand(BitFieldOperation.Set, _, Some(offset), value) =>
+          args.set(bitFieldType, offset, value.getOrElse(0L))
+
+        case BitFieldCommand(BitFieldOperation.Set, _, _, value) =>
+          args.set(bitFieldType, value.getOrElse(0L))
+
+        case BitFieldCommand(BitFieldOperation.Get, _, Some(offset), _) =>
+          args.get(bitFieldType, offset)
+
+        case BitFieldCommand(BitFieldOperation.Get, _, _, _) =>
+          args.get(bitFieldType)
+
+        case BitFieldCommand(BitFieldOperation.Incrby, _, Some(offset), Some(value)) =>
+          args.incrBy(bitFieldType, offset, value)
+
+        case BitFieldCommand(BitFieldOperation.Incrby, _, _, Some(value)) =>
+          args.incrBy(bitFieldType, value)
+
+        case BitFieldCommand(BitFieldOperation.OverflowSat, _, _, _) =>
+          args.overflow(BitFieldArgs.OverflowType.SAT)
+
+        case BitFieldCommand(BitFieldOperation.OverflowFail, _, _, _) =>
+          args.overflow(BitFieldArgs.OverflowType.FAIL)
+
+        case BitFieldCommand(BitFieldOperation.OverflowWrap, _, _, _) =>
+          args.overflow(BitFieldArgs.OverflowType.WRAP)
+
+        case _ =>
+          throw new IllegalArgumentException("Invalid BitFieldCommand parameters")
+      }
+    }
+
+    delegateRedisClusterCommandAndLift(_.bitfield(key, args)).map(_.asScala.toSeq.map(_.longValue()))
+  }
+
+  override def bitOpAnd(destination: K, keys: K*): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitopAnd(destination, keys: _*)).map(Long2long)
+
+  override def bitOpOr(destination: K, keys: K*): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitopOr(destination, keys: _*)).map(Long2long)
+
+  override def bitOpXor(destination: K, keys: K*): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitopXor(destination, keys: _*)).map(Long2long)
+
+  override def bitOpNot(destination: K, source: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitopNot(destination, source)).map(Long2long)
+
+  override def bitPos(key: K, state: Boolean): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitpos(key, state)).map(Long2long)
+
+  override def bitPos(key: K, state: Boolean, start: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitpos(key, state, start)).map(Long2long)
+
+  override def bitPos(key: K, state: Boolean, start: Long, end: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.bitpos(key, state, start, end)).map(Long2long)
+
+  override def getBit(key: K, offset: Long): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.getbit(key, offset)).map(Long2long)
 
   override def get(key: K): Future[Option[V]] =
     delegateRedisClusterCommandAndLift(_.get(key)).map(Option.apply)
@@ -52,6 +127,9 @@ private[arugula] trait LettuceRedisStringAsyncCommands[K, V] extends RedisString
 
   override def set(key: K, value: V): Future[Unit] =
     delegateRedisClusterCommandAndLift(_.set(key, value)).map(_ => ())
+
+  override def setBit(key: K, offset: Long, value: Int): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.setbit(key, offset, value)).map(Long2long)
 
   override def setEx(key: K, value: V, expiresIn: FiniteDuration): Future[Unit] =
     (expiresIn.unit match {

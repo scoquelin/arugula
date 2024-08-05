@@ -6,10 +6,11 @@ import scala.concurrent.duration.{DurationInt, DurationLong}
 import scala.jdk.CollectionConverters._
 
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZRange}
+import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType, BitFieldOperation}
 import com.github.scoquelin.arugula.connection.RedisConnection
 import io.lettuce.core.{GetExArgs, KeyValue, RedisFuture, ScoredValue, ScoredValueScanCursor}
 import org.mockito.ArgumentCaptor
-import org.mockito.ArgumentMatchers.{any, anyLong, anyString, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyBoolean, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.{FutureOutcome, wordspec}
@@ -508,6 +509,150 @@ class LettuceRedisCommandsClientSpec extends wordspec.FixtureAsyncWordSpec with 
       testClass.decrBy("key", 2).map { result =>
         result mustBe expectedValue
         verify(lettuceAsyncCommands).decrby("key", 2)
+        succeed
+      }
+    }
+
+    "delegate BITCOUNT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitcount(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.bitCount("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitcount("key")
+        succeed
+      }
+    }
+
+    "delegate BITCOUNT command with start and end to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitcount(anyString, anyLong, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.bitCount("key", 0, 1).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitcount("key", 0, 1)
+        succeed
+      }
+    }
+
+    "delegate BITFIELD command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: Seq[Long] = Seq(1L, 2L, 3L)
+      val mockRedisFuture: RedisFuture[java.util.List[java.lang.Long]] = mockRedisFutureToReturn(expectedValue.map(v => v: java.lang.Long).asJava)
+      when(lettuceAsyncCommands.bitfield(anyString, any[io.lettuce.core.BitFieldArgs])).thenReturn(mockRedisFuture)
+      val commands: Seq[BitFieldCommand] = Seq(
+        BitFieldCommand.get(BitFieldDataType.Signed(8)),
+        BitFieldCommand.set(BitFieldDataType.Signed(8), 1L, offset = 1),
+        BitFieldCommand.incrBy(BitFieldDataType.Signed(8), 1L, offset = 2)
+      )
+      testClass.bitField("key", commands).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitfield(meq("key"), any)
+        succeed
+      }
+    }
+
+    "delegate BITOPAND command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitopAnd(anyString, anyString, anyString)).thenReturn(mockRedisFuture)
+
+      testClass.bitOpAnd("destination", "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitopAnd("destination", "key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate BITOPOR command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitopOr(anyString, anyString, anyString)).thenReturn(mockRedisFuture)
+
+      testClass.bitOpOr("destination", "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitopOr("destination", "key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate BITOPXOR command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitopXor(anyString, anyString, anyString)).thenReturn(mockRedisFuture)
+
+      testClass.bitOpXor("destination", "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitopXor("destination", "key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate BITOPNOT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitopNot(anyString, anyString)).thenReturn(mockRedisFuture)
+
+      testClass.bitOpNot("destination", "key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitopNot("destination", "key")
+        succeed
+      }
+    }
+
+    "delegate BITPOS command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitpos(anyString, anyBoolean)).thenReturn(mockRedisFuture)
+
+      testClass.bitPos("key", true).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitpos("key", true)
+        succeed
+      }
+    }
+
+    "delegate BITPOS command with start to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitpos(anyString, anyBoolean, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.bitPos("key", true, 0).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitpos("key", true, 0)
+        succeed
+      }
+    }
+
+    "delegate BITPOS command with start and end to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.bitpos(anyString, anyBoolean, anyLong, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.bitPos("key", true, 0, 1).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).bitpos("key", true, 0, 1)
         succeed
       }
     }
