@@ -1,5 +1,5 @@
 inThisBuild(List(
-  organization := "io.github.scoquelin",
+  organization := "com.github.scoquelin",
   homepage := Some(url("https://github.com/scoquelin/arugula")),
   licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
   developers := List(
@@ -19,9 +19,6 @@ inThisBuild(List(
 ))
 
 ThisBuild / version := "0.1.0-SNAPSHOT"
-
-ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
-sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 
 ThisBuild / scalaVersion := "2.13.14"
 ThisBuild / crossScalaVersions := Seq("2.13.14", "3.3.3")
