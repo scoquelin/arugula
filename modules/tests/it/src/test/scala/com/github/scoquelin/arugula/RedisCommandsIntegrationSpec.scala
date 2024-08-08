@@ -107,6 +107,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsLongCodec) { client =>
           val key = randomKey("increment-key")
           for {
+            _ <- client.set(key, 0L)
             _ <- client.incr(key)
             value <- client.get(key)
             _ <- value match {
@@ -444,6 +445,50 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         }
       }
 
+      "support complex hash operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("hash-key")
+          val field = "field"
+          val value = "value"
+          for {
+            _ <- client.hSet(key, field, value)
+            fieldExists <- client.hExists(key, field)
+            _ <- fieldExists shouldBe true
+            randomField <- client.hRandField(key)
+            _ <- randomField shouldBe Some(field)
+            randomFields <- client.hRandField(key, 2)
+            _ <- randomFields shouldBe Seq(field)
+            randomFieldWithValue <- client.hRandFieldWithValues(key)
+            _ <- randomFieldWithValue shouldBe Some(field -> value)
+            fieldValues <- client.hKeys(key)
+            _ <- fieldValues shouldBe Seq(field)
+            fieldValues <- client.hGetAll(key)
+            _ <- fieldValues shouldBe Map(field -> value)
+            fieldValues <- client.hVals(key)
+            _ <- fieldValues shouldBe Seq(value)
+            len <- client.hLen(key)
+            _ <- len shouldBe 1L
+            hStrLen <- client.hStrLen(key, field)
+            _ <- hStrLen shouldBe 5L
+            hScanResults <- client.hScan(key)
+            _ <- hScanResults._1.finished shouldBe true
+            _ <- hScanResults._2 shouldBe Map(field -> value)
+            _ <- client.del(key)
+            _ <- client.hMSet(key, Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3"))
+            fieldValues <- client.hGetAll(key)
+            _ <- fieldValues shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
+            scanResultsWithFilter <- client.hScan(key, matchPattern = Some("field*"))
+            _ <- scanResultsWithFilter._1.finished shouldBe true
+            _ <- scanResultsWithFilter._2 shouldBe Map("field1" -> "value1", "field2" -> "value2")
+            scanResultsWithLimit <- client.hScan(key, limit = Some(10))
+            _ <- scanResultsWithLimit._1.finished shouldBe true
+            _ <- scanResultsWithLimit._2 shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
+            randomFieldsWithValues <- client.hRandFieldWithValues(key, 3)
+            _ <- randomFieldsWithValues shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
+          } yield succeed
+        }
+      }
+
       "create, retrieve, and delete a field with an integer value for a hash key" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("int-hash-key")
@@ -466,7 +511,6 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           } yield succeed
         }
       }
-
     }
 
     "leveraging RedisPipelineAsyncCommands" should {
