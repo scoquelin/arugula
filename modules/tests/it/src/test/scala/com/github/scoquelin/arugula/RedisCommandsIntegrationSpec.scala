@@ -5,9 +5,9 @@ import scala.collection.immutable.ListMap
 import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
-
 import scala.concurrent.duration._
 
+import com.github.scoquelin.arugula.commands.RedisListAsyncCommands
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 
 import java.util.concurrent.TimeUnit
@@ -361,6 +361,52 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         }
       }
 
+      "support move operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("list-key1") + suffix
+          val key2 = randomKey("list-key2") + suffix
+          val key3 = randomKey("list-key3") + suffix
+
+          for {
+            _ <- client.lPush(key1, "one", "two", "three")
+            _ <- client.lPush(key2, "four", "five", "six")
+            _ <- client.lMove(key1, key2, RedisListAsyncCommands.Side.Left, RedisListAsyncCommands.Side.Right)
+            _ <- client.blMove(key1, key3, RedisListAsyncCommands.Side.Left, RedisListAsyncCommands.Side.Right, timeout = 0.1)
+            key1Range <- client.lRange(key1, 0, -1)
+            _ <- key1Range shouldBe List("one")
+            key2Range <- client.lRange(key2, 0, -1)
+            _ <- key2Range shouldBe List("six", "five", "four", "three")
+            key3Range <- client.lRange(key3, 0, -1)
+            _ <- key3Range shouldBe List("two")
+
+          } yield succeed
+        }
+      }
+
+      "support multi pop operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("list-key1") + suffix
+          val key2 = randomKey("list-key2") + suffix
+          for {
+            _ <- client.lPush(key1, "one", "two", "three")
+            _ <- client.lPush(key2, "four", "five", "six")
+            mPopResult <- client.lMPop(List(key1, key2), count = 2)
+            _ <- mPopResult shouldBe Some((key1, List("three", "two")))
+            key1Range <- client.lRange(key1, 0, -1)
+            _ <- key1Range shouldBe List("one")
+            key2Range <- client.lRange(key2, 0, -1)
+            _ <- key2Range shouldBe List("six", "five", "four")
+            blPopResult <- client.blMPop(List(key1, key2), count = 2, timeout = 0.1)
+            _ <- blPopResult shouldBe Some((key1, List("one")))
+            key1Range <- client.lRange(key1, 0, -1)
+            _ <- key1Range shouldBe List()
+            key2Range <- client.lRange(key2, 0, -1)
+            _ <- key2Range shouldBe List("six", "five", "four")
+          } yield succeed
+        }
+      }
     }
 
     "leveraging RedisSortedSetAsyncCommands" should {
