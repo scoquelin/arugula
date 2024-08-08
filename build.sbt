@@ -6,13 +6,13 @@ inThisBuild(List(
     Developer(
       "scoquelin",
       "Sébastien Coquelin",
-      "seb.coquelin at gmail.com",
+      "seb.coquelin@gmail.com",
       url("https://www.github.com/scoquelin")
     ),
     Developer(
       "72squared",
       "John Loehrer",
-      "72squared at gmail.com",
+      "72squared@gmail.com",
       url("https://www.github.com/72squared")
     )
   )
