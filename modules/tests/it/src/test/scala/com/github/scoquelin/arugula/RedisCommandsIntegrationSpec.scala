@@ -1,12 +1,14 @@
 package com.github.scoquelin.arugula
 
 import scala.collection.immutable.ListMap
+import scala.concurrent.Future
 
 import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
+import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
 import com.github.scoquelin.arugula.commands.RedisListAsyncCommands
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 
@@ -429,16 +431,16 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             revRangeByScore <- client.zRevRangeByScore(key, ZRange(0, 2), Some(RangeLimit(0, 2)))
             _ <- revRangeByScore.shouldBe(List("two", "one"))
             zScan <- client.zScan(key)
-            _ <- zScan.cursor.finished shouldBe true
+            _ <- zScan.finished shouldBe true
             _ <- zScan.values shouldBe List(ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
             zScanWithMatch <- client.zScan(key, matchPattern = Some("t*"))
-            _ <- zScanWithMatch.cursor.finished shouldBe true
+            _ <- zScanWithMatch.finished shouldBe true
             _ <- zScanWithMatch.values shouldBe List(ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
             zScanWithLimit <- client.zScan(key, limit = Some(10))
-            _ <- zScanWithLimit.cursor.finished shouldBe true
+            _ <- zScanWithLimit.finished shouldBe true
             _ <- zScanWithLimit.values shouldBe List(ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
             zScanWithMatchAndLimit <- client.zScan(key, matchPattern = Some("t*"), limit = Some(10))
-            _ <- zScanWithMatchAndLimit.cursor.finished shouldBe true
+            _ <- zScanWithMatchAndLimit.finished shouldBe true
             _ <- zScanWithMatchAndLimit.values shouldBe List(ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
             zRemRangeByRank <- client.zRemRangeByRank(key, 0, 0)
             _ <- zRemRangeByRank shouldBe 1L
@@ -517,18 +519,18 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             hStrLen <- client.hStrLen(key, field)
             _ <- hStrLen shouldBe 5L
             hScanResults <- client.hScan(key)
-            _ <- hScanResults._1.finished shouldBe true
-            _ <- hScanResults._2 shouldBe Map(field -> value)
+            _ <- hScanResults.finished shouldBe true
+            _ <- hScanResults.values shouldBe Map(field -> value)
             _ <- client.del(key)
             _ <- client.hMSet(key, Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3"))
             fieldValues <- client.hGetAll(key)
             _ <- fieldValues shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
             scanResultsWithFilter <- client.hScan(key, matchPattern = Some("field*"))
-            _ <- scanResultsWithFilter._1.finished shouldBe true
-            _ <- scanResultsWithFilter._2 shouldBe Map("field1" -> "value1", "field2" -> "value2")
+            _ <- scanResultsWithFilter.finished shouldBe true
+            _ <- scanResultsWithFilter.values shouldBe Map("field1" -> "value1", "field2" -> "value2")
             scanResultsWithLimit <- client.hScan(key, limit = Some(10))
-            _ <- scanResultsWithLimit._1.finished shouldBe true
-            _ <- scanResultsWithLimit._2 shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
+            _ <- scanResultsWithLimit.finished shouldBe true
+            _ <- scanResultsWithLimit.values shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
             randomFieldsWithValues <- client.hRandFieldWithValues(key, 3)
             _ <- randomFieldsWithValues shouldBe Map("field1" -> "value1", "field2" -> "value2", "extraField3" -> "value3")
           } yield succeed
@@ -554,6 +556,124 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- deleted shouldBe 1L
             keyExists <- client.exists(key)
             _ <- keyExists shouldBe false
+          } yield succeed
+        }
+      }
+    }
+
+    "leveraging RedisSetAsyncCommands" should {
+      "create, retrieve, pop, and remove values in a set" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("set")
+          val values = List("one", "two", "three")
+          for {
+            addResults <- client.sAdd(key, values: _*)
+            _ <- addResults shouldBe values.size
+            members <- client.sMembers(key)
+            _ <- members shouldBe values.toSet
+            isMember <- client.sIsMember(key, "two")
+            _ <- isMember shouldBe true
+            isMember <- client.sIsMember(key, "four")
+            _ <- isMember shouldBe false
+            multiIsMember <- client.smIsMember(key, "one", "two", "three", "four")
+            _ <- multiIsMember shouldBe List(true, true, true, false)
+            cardResult <- client.sCard(key)
+            _ <- cardResult shouldBe values.size
+            popResult <- client.sPop(key)
+            _ <- popResult shouldBe defined
+            removeResult <- client.sRem(key, values: _*)
+            _ <- removeResult shouldBe 2
+          } yield succeed
+        }
+      }
+
+      "support random member operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("set")
+          val values = List("one", "two", "three")
+          for {
+            addResults <- client.sAdd(key, values: _*)
+            _ <- addResults shouldBe values.size
+            randResult <- client.sRandMember(key)
+            _ <- randResult shouldBe defined
+            randResults <- client.sRandMember(key, 2)
+            _ <- randResults.size shouldBe 2
+          } yield succeed
+        }
+      }
+
+      "support multi-key union, diffing, and moving operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("set-1") + suffix
+          val key2 = randomKey("set-2") + suffix
+          val key3 = randomKey("set-3") + suffix
+          val values = List("one", "two", "three")
+          for {
+            addResults <- client.sAdd(key1, values: _*)
+            _ <- addResults shouldBe values.size
+            addResults <- client.sAdd(key2, values: _*)
+            _ <- addResults shouldBe values.size
+            addResults <- client.sAdd(key3, values: _*)
+            _ <- addResults shouldBe values.size
+            sDiffResults <- client.sDiff(key1, key2, key3)
+            _ <- sDiffResults shouldBe Set()
+            sInterResults <- client.sInter(key1, key2, key3)
+            _ <- sInterResults shouldBe values.toSet
+            sUnionResults <- client.sUnion(key1, key2, key3)
+            _ <- sUnionResults shouldBe values.toSet
+            sDiffStoreResults <- client.sDiffStore(key1, key2, key3, key3)
+            _ <- sDiffStoreResults shouldBe 0
+            sInterStoreResults <- client.sInterStore(key1, key2, key3, key3)
+            _ <- sInterStoreResults shouldBe values.size
+            sUnionStoreResults <- client.sUnionStore(key1, key2, key3, key3)
+            _ <- sUnionStoreResults shouldBe values.size
+            interCardResult <- client.sInterCard(key1, key2, key3)
+            _ <- interCardResult shouldBe values.size
+            moveResult <- client.sMove(key1, key2, "two")
+            _ <- moveResult shouldBe true
+            diffResult <- client.sDiff(key2, key1)
+            _ <- diffResult shouldBe Set("two")
+            unionResult <- client.sUnion(key1, key2)
+            _ <- unionResult shouldBe values.toSet
+          } yield succeed
+        }
+      }
+
+
+      "support scanning a set" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("large-set")
+          val members = (1 to 1000).map(_.toString).toList
+
+          def scanAll(cursor: String = InitialCursor, accumulated: Set[String] = Set.empty): Future[Set[String]] = {
+            client.sScan(key, cursor).flatMap { scanResult =>
+              val newAccumulated = accumulated ++ scanResult.values
+              if (scanResult.finished) Future.successful(newAccumulated)
+              else scanAll(scanResult.cursor, newAccumulated)
+            }
+          }
+
+          for {
+            addResults <- client.sAdd(key, members: _*)
+            _ <- addResults shouldBe members.size
+            scanResult <- client.sScan(key)
+            _ <- scanResult.finished shouldBe false
+            _ <- scanResult.values.size shouldBe >=(1)
+            scanResultNext <- client.sScan(key, cursor = scanResult.cursor)
+            _ <- scanResultNext.finished shouldBe false
+            _ <- scanResultNext.values.size shouldBe >=(2)
+            scanResultWithMatch <- client.sScan(key, matchPattern = Some("1*"))
+            _ <- scanResultWithMatch.finished shouldBe false
+            _ <- members.filter(_.startsWith("1")).toSet should contain allElementsOf scanResultWithMatch.values
+            scanResultWithLimit <- client.sScan(key, limit = Some(3))
+            _ <- scanResultWithLimit.finished shouldBe false
+            _ <- members should contain allElementsOf scanResultWithLimit.values
+
+            // start with initial cursor and fetch until finished
+            scanResult <- scanAll()
+            _ <- scanResult.size shouldEqual members.size
+            _ <- scanResult shouldBe members.toSet
           } yield succeed
         }
       }

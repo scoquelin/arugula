@@ -15,16 +15,3 @@ trait RedisKeyAsyncCommands[K, V] {
   def expire(key: K, expiresIn: FiniteDuration): Future[Boolean]
   def ttl(key: K): Future[Option[FiniteDuration]]
 }
-
-object RedisKeyAsyncCommands {
-  final case class ScanCursor(cursor: String, finished: Boolean)
-
-  object ScanCursor{
-    def apply(cursor: String) = new ScanCursor(cursor, finished = false)
-
-    val Initial: ScanCursor = ScanCursor("0", finished = false)
-
-    val Finished: ScanCursor = ScanCursor("0", finished = true)
-  }
-
-}

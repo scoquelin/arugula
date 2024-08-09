@@ -127,8 +127,8 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       when(lettuceAsyncCommands.zscan(any[String], any[io.lettuce.core.ScanCursor])).thenReturn(mockRedisFuture)
 
       testClass.zScan("key").map { result =>
-        result.cursor.cursor mustBe "1"
-        result.cursor.finished mustBe false
+        result.cursor mustBe "1"
+        result.finished mustBe false
         result.values mustBe List(ScoreWithValue(1, "one"))
         val cursorCaptor = ArgumentCaptor.forClass(classOf[io.lettuce.core.ScanCursor])
         verify(lettuceAsyncCommands).zscan(meq("key"), cursorCaptor.capture().asInstanceOf[io.lettuce.core.ScanCursor])
@@ -151,8 +151,8 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       when(lettuceAsyncCommands.zscan(any[String], any[io.lettuce.core.ScanCursor], any[io.lettuce.core.ScanArgs])).thenReturn(mockRedisFuture)
 
       testClass.zScan("key", matchPattern = Some("o*"), limit = Some(10)).map { result =>
-        result.cursor.cursor mustBe "1"
-        result.cursor.finished mustBe false
+        result.cursor mustBe "1"
+        result.finished mustBe false
         result.values mustBe List(ScoreWithValue(1, "one"))
         val cursorCaptor = ArgumentCaptor.forClass(classOf[io.lettuce.core.ScanCursor])
         val scanArgsCaptor = ArgumentCaptor.forClass(classOf[io.lettuce.core.ScanArgs])

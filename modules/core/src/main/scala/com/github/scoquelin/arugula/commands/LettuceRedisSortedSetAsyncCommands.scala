@@ -2,12 +2,12 @@ package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 
-import com.github.scoquelin.arugula.commands.RedisKeyAsyncCommands.ScanCursor
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.ZAddOptions.{CH, GT, LT, NX, XX}
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScanCursorWithScoredValues, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
 import io.lettuce.core.{Limit, Range, ScanArgs, ScoredValue, ZAddArgs}
 import scala.jdk.CollectionConverters._
 
+import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.{InitialCursor, ScanResults}
 import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
 private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSortedSetAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
@@ -56,7 +56,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
     delegateRedisClusterCommandAndLift(_.zrangeWithScores(key, start, stop))
       .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
 
-  override def zScan(key: K, cursor: ScanCursor = ScanCursor.Initial, limit: Option[Long] = None, matchPattern: Option[String] = None): Future[ScanCursorWithScoredValues[V]] = {
+  override def zScan(key: K, cursor: String = InitialCursor, limit: Option[Long] = None, matchPattern: Option[String] = None): Future[ScanResults[List[ScoreWithValue[V]]]] = {
     val scanArgs = (limit, matchPattern) match {
       case (Some(limitValue), Some(matchPatternValue)) =>
         Some(ScanArgs.Builder.limit(limitValue).`match`(matchPatternValue))
@@ -70,12 +70,20 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
 
     scanArgs match {
       case Some(args) =>
-        delegateRedisClusterCommandAndLift(_.zscan(key, io.lettuce.core.ScanCursor.of(cursor.cursor), args)).map { scanResult =>
-          ScanCursorWithScoredValues(ScanCursor(scanResult.getCursor, scanResult.isFinished), scanResult.getValues.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+        delegateRedisClusterCommandAndLift(_.zscan(key, io.lettuce.core.ScanCursor.of(cursor), args)).map { scanResult =>
+          ScanResults(
+            cursor = scanResult.getCursor,
+            finished = scanResult.isFinished,
+            values = scanResult.getValues.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue))
+          )
         }
       case None =>
-        delegateRedisClusterCommandAndLift(_.zscan(key, io.lettuce.core.ScanCursor.of(cursor.cursor))).map { scanResult =>
-          ScanCursorWithScoredValues(ScanCursor(scanResult.getCursor, scanResult.isFinished), scanResult.getValues.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+        delegateRedisClusterCommandAndLift(_.zscan(key, io.lettuce.core.ScanCursor.of(cursor))).map { scanResult =>
+          ScanResults(
+            cursor = scanResult.getCursor,
+            finished = scanResult.isFinished,
+            values = scanResult.getValues.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue))
+          )
         }
     }
   }
