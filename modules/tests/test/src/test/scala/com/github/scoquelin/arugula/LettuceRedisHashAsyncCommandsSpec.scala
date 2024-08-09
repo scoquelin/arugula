@@ -2,13 +2,14 @@ package com.github.scoquelin.arugula
 
 import scala.collection.immutable.ListMap
 
-import com.github.scoquelin.arugula.commands.RedisKeyAsyncCommands.ScanCursor
 import io.lettuce.core.{KeyValue, MapScanCursor, RedisFuture}
 import org.mockito.ArgumentMatchers.{any, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.{FutureOutcome, wordspec}
 import scala.jdk.CollectionConverters._
+
+import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.ScanResults
 
 
 
@@ -253,7 +254,7 @@ class LettuceRedisHashAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wi
     "delegate HSCAN command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
-      val expectedValue = (ScanCursor("0", finished = false), Map("field1" -> "value1", "field2" -> "value2"))
+      val expectedValue = ScanResults(cursor = "0", finished = false, values = Map("field1" -> "value1", "field2" -> "value2"))
       val mapScanCursor = new MapScanCursor[String, String]()
       mapScanCursor.getMap.put("field1", "value1")
       mapScanCursor.getMap.put("field2", "value2")
@@ -274,7 +275,7 @@ class LettuceRedisHashAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wi
     "delegate HSCAN command with cursor and match options to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
-      val expectedValue = (ScanCursor("1", finished = true), Map("field3" -> "value3", "field4" -> "value4"))
+      val expectedValue = ScanResults("1", finished = true, values = Map("field3" -> "value3", "field4" -> "value4"))
       val mapScanCursor = new MapScanCursor[String, String]()
       mapScanCursor.getMap.put("field3", "value3")
       mapScanCursor.getMap.put("field4", "value4")
@@ -285,7 +286,7 @@ class LettuceRedisHashAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wi
       )
       when(lettuceAsyncCommands.hscan(anyString, any[io.lettuce.core.ScanCursor], any)).thenReturn(mockRedisFuture)
 
-      testClass.hScan("key", ScanCursor("0", finished = false), matchPattern = Some("field*")).map { result =>
+      testClass.hScan("key", matchPattern = Some("field*")).map { result =>
         result mustBe expectedValue
         verify(lettuceAsyncCommands).hscan(meq("key"), any[io.lettuce.core.ScanCursor], any[io.lettuce.core.ScanArgs])
         succeed

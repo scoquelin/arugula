@@ -4,6 +4,7 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
+import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.{InitialCursor, ScanResults}
 import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 import io.lettuce.core.ScanArgs
 
@@ -40,12 +41,7 @@ private[arugula] trait LettuceRedisHashAsyncCommands[K, V] extends RedisHashAsyn
       case kv if kv.hasValue => kv.getKey -> kv.getValue
     }.toMap)
 
-  override def hScan(
-    key: K,
-    cursor: RedisKeyAsyncCommands.ScanCursor = RedisKeyAsyncCommands.ScanCursor.Initial,
-    limit: Option[Long] = None,
-    matchPattern: Option[String] = None
-  ): Future[(RedisKeyAsyncCommands.ScanCursor, Map[K, V])] = {
+  override def hScan(key: K,  cursor: String = InitialCursor, limit: Option[Long] = None, matchPattern: Option[String] = None): Future[ScanResults[Map[K, V]]] = {
     val scanArgs = (limit, matchPattern) match {
       case (Some(limitValue), Some(matchPatternValue)) =>
         Some(ScanArgs.Builder.limit(limitValue).`match`(matchPatternValue))
@@ -56,8 +52,7 @@ private[arugula] trait LettuceRedisHashAsyncCommands[K, V] extends RedisHashAsyn
       case _ =>
         None
     }
-    val lettuceCursor = io.lettuce.core.ScanCursor.of(cursor.cursor)
-    lettuceCursor.setFinished(cursor.finished)
+    val lettuceCursor = io.lettuce.core.ScanCursor.of(cursor)
     val response = scanArgs match {
       case Some(scanArgs) =>
         delegateRedisClusterCommandAndLift(_.hscan(key, lettuceCursor, scanArgs))
@@ -65,9 +60,10 @@ private[arugula] trait LettuceRedisHashAsyncCommands[K, V] extends RedisHashAsyn
         delegateRedisClusterCommandAndLift(_.hscan(key, lettuceCursor))
     }
     response.map{ result =>
-      (
-        RedisKeyAsyncCommands.ScanCursor(result.getCursor, finished = result.isFinished),
-        result.getMap.asScala.toMap
+      ScanResults(
+        cursor = result.getCursor,
+        finished = result.isFinished,
+        values = result.getMap.asScala.toMap
       )
     }
   }

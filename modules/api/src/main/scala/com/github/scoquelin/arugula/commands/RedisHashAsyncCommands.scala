@@ -3,7 +3,7 @@ package com.github.scoquelin.arugula.commands
 import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 
-import com.github.scoquelin.arugula.commands.RedisKeyAsyncCommands.ScanCursor
+import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.{ScanResults, InitialCursor}
 
 /**
  * Asynchronous commands for manipulating/querying Hashes (key/value pairs)
@@ -133,12 +133,20 @@ trait RedisHashAsyncCommands[K, V] {
    * scan the fields of a hash, returning the cursor and a map of field -> value
    * Repeat calls with the returned cursor to get all fields until the cursor is finished
    * @param key The key
-   * @param cursor The cursor
-   * @param limit The maximum number of fields to return
+   * @param cursor The cursor to resume scanning from previous calls
+   *               (use InitialCursor to start at the beginning).
+   * @param limit The maximum number of fields to return. If None, the server determines the limit.
+   *              Note that redis may return more fields than the limit or less than the limit. This is
+   *              a hint to the server, not a guarantee.
    * @param matchPattern A glob-style pattern to match fields against
    * @return The next cursor and a map of field -> value
    */
-  def hScan(key: K,  cursor: ScanCursor = ScanCursor.Initial, limit: Option[Long] = None, matchPattern: Option[String] = None): Future[(ScanCursor, Map[K, V])]
+  def hScan(
+    key: K,
+    cursor: String = InitialCursor,
+    limit: Option[Long] = None,
+    matchPattern: Option[String] = None
+  ): Future[ScanResults[Map[K, V]]]
 
   /**
    * Get the length of a hash field value
