@@ -4,7 +4,7 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 
 import com.github.scoquelin.arugula.codec.RedisCodec
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
@@ -418,18 +418,30 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           val key = randomKey("sorted-set")
 
           for {
-            zAdd <- client.zAdd(key = key, args = None, ScoreWithValue(1, "one"))
+            zAdd <- client.zAdd(key = key, ScoreWithValue(1, "one"))
             _ <- zAdd shouldBe 1L
-            zAddWithNx <- client.zAdd(key = key, args = Some(ZAddOptions.NX), ScoreWithValue(1, "one"))
+            zAddWithNx <- client.zAdd(key = key, args = ZAddOptions(ZAddOptions.NX), ScoreWithValue(1, "one"))
             _ <- zAddWithNx shouldBe 0L
-            zAddNewValueWithNx <- client.zAdd(key = key, args = Some(ZAddOptions.NX), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
+            zAddNewValueWithNx <- client.zAdd(key = key, args = ZAddOptions(ZAddOptions.NX), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
             _ <- zAddNewValueWithNx shouldBe 4L
+            zRange <- client.zRange(key, 0, -1)
+            _ <- zRange shouldBe List("one", "two", "three", "four", "five")
             rangeWithScores <- client.zRangeWithScores(key, 0, 1)
             _ <- rangeWithScores.shouldBe(List(ScoreWithValue(1, "one"), ScoreWithValue(2, "two")))
             rangeByScore <- client.zRangeByScore(key, ZRange(0, 2), Some(RangeLimit(0, 2)))
             _ <- rangeByScore.shouldBe(List("one", "two"))
+            rangeByScoreWithScores <- client.zRangeByScoreWithScores(key, ZRange(0, 2), Some(RangeLimit(0, 2)))
+            _ <- rangeByScoreWithScores.shouldBe(List(ScoreWithValue(1, "one"), ScoreWithValue(2, "two")))
+            revRange <- client.zRevRange(key, 0, -1)
+            _ <- revRange shouldBe List("five", "four", "three", "two", "one")
             revRangeByScore <- client.zRevRangeByScore(key, ZRange(0, 2), Some(RangeLimit(0, 2)))
             _ <- revRangeByScore.shouldBe(List("two", "one"))
+            revRangeWithScores <- client.zRevRangeWithScores(key, 0, -1)
+            _ <- revRangeWithScores shouldBe List(ScoreWithValue(5, "five"), ScoreWithValue(4, "four"), ScoreWithValue(3, "three"), ScoreWithValue(2, "two"), ScoreWithValue(1, "one"))
+            zCard <- client.zCard(key)
+            _ <- zCard shouldBe 5L
+            zCount <- client.zCount(key, ZRange(0, 2))
+            _ <- zCount shouldBe 2L
             zScan <- client.zScan(key)
             _ <- zScan.finished shouldBe true
             _ <- zScan.values shouldBe List(ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
@@ -452,9 +464,68 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- zPopMax.headOption shouldBe Some(ScoreWithValue(5, "five"))
             zRem <- client.zRem(key, "four")
             _ <- zRem shouldBe 1L
-
             endState <- client.zRangeWithScores(key, 0, -1)
             _ <- endState.isEmpty shouldBe true
+          } yield succeed
+        }
+      }
+
+      "support random key operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("sorted-set-random")
+          for {
+            _ <- client.zAdd(key, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"), ScoreWithValue(4, "four"), ScoreWithValue(5, "five"))
+            randomKey <- client.zRandMember(key)
+            _ <- randomKey.isDefined shouldBe true
+            randomKeys <- client.zRandMember(key, 3)
+            _ <- randomKeys.size shouldBe 3
+            randomKeyWithValue <- client.zRandMemberWithScores(key)
+            _ <- randomKeyWithValue.isDefined shouldBe true
+            randomKeysWithValues <- client.zRandMemberWithScores(key, 3)
+            _ <- randomKeysWithValues.size shouldBe 3
+          } yield succeed
+        }
+      }
+
+      "support increment operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("sorted-set-incr")
+          for {
+            _ <- client.zAdd(key, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
+            incrResult <- client.zIncrBy(key, 2, "two")
+            _ <- incrResult shouldBe 4.0
+            incrResult <- client.zIncrBy(key, 2, "four")
+            _ <- incrResult shouldBe 2.0
+            getResult <- client.zScore(key, "four")
+            _ <- getResult shouldBe Some(2.0)
+            zRankResult <- client.zRank(key, "four")
+            _ <- zRankResult shouldBe Some(1L)
+            zRankWithScore <- client.zRankWithScore(key, "four")
+            _ <- zRankWithScore shouldBe Some(ScoreWithValue(2.0, 1))
+            zRevRankResult <- client.zRevRank(key, "four")
+            _ <- zRevRankResult shouldBe Some(2L)
+            zRevRankWithScore <- client.zRevRankWithScore(key, "four")
+            _ <- zRevRankWithScore shouldBe Some(ScoreWithValue(2.0, 2))
+            zAddIncr <- client.zAddIncr(key, ZAddOptions(ZAddOptions.XX), 2.9, "four")
+            _ <- zAddIncr shouldBe Some(4.9)
+          } yield succeed
+        }
+      }
+
+      "support multi-key operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("sorted-set1") + suffix
+          val key2 = randomKey("sorted-set2") + suffix
+          val key3 = randomKey("sorted-set3") + suffix
+          for {
+            _ <- client.zAdd(key1, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
+            _ <- client.zAdd(key2, ScoreWithValue(4, "four"), ScoreWithValue(5, "five"), ScoreWithValue(6, "six"))
+            _ <- client.zAdd(key3, ScoreWithValue(7, "seven"), ScoreWithValue(8, "eight"), ScoreWithValue(9, "nine"))
+            bzPopMin <- client.bzPopMin(0.1, key1, key2, key3)
+            _ <- bzPopMin shouldBe Some(ScoreWithKeyValue(1, key1, "one"))
+            bzPopMax <- client.bzPopMax(0.1, key3, key2, key1)
+            _ <- bzPopMax shouldBe Some(ScoreWithKeyValue(9, key3, "nine"))
           } yield succeed
         }
       }

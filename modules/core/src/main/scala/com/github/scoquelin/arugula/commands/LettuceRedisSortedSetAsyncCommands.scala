@@ -2,8 +2,7 @@ package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
 
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.ZAddOptions.{CH, GT, LT, NX, XX}
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, ZAddOptions, ZRange}
 import io.lettuce.core.{Limit, Range, ScanArgs, ScoredValue, ZAddArgs}
 import scala.jdk.CollectionConverters._
 
@@ -11,30 +10,87 @@ import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.{InitialCurs
 import com.github.scoquelin.arugula.internal.LettuceRedisCommandDelegation
 
 private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSortedSetAsyncCommands[K, V] with LettuceRedisCommandDelegation[K, V] {
+
   import LettuceRedisSortedSetAsyncCommands.toJavaNumberRange
-  override def zAdd(key: K, args: Option[ZAddOptions], values: ScoreWithValue[V]*): Future[Long] = {
-    ((args match {
-      case Some(zAddOption) => zAddOption match {
-        case NX => Some(ZAddArgs.Builder.nx())
-        case XX => Some(ZAddArgs.Builder.xx())
-        case LT => Some(ZAddArgs.Builder.lt())
-        case GT => Some(ZAddArgs.Builder.gt())
-        case CH => Some(ZAddArgs.Builder.ch())
-      }
+
+  override def bzPopMin(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmin(timeout, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
       case _ => None
-    }) match {
-      case Some(zAddArgs) =>
-        delegateRedisClusterCommandAndLift(_.zadd(key, zAddArgs, values.map(scoreWithValue => ScoredValue.just(scoreWithValue.score, scoreWithValue.value)): _*))
-      case None =>
-        delegateRedisClusterCommandAndLift(_.zadd(key, values.map(scoreWithValue => ScoredValue.just(scoreWithValue.score, scoreWithValue.value)): _*))
-    }).map(Long2long)
+    }
+
+  override def bzPopMin(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmin(timeout, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+      case _ => None
+    }
+
+  override def bzPopMax(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmax(timeout, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+      case _ => None
+    }
+
+  override def bzPopMax(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmax(timeout, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+      case _ => None
+    }
+
+  override def zAdd(key: K, values: ScoreWithValue[V]*): Future[Long] = {
+    delegateRedisClusterCommandAndLift(_.zadd(key, values.map(scoreWithValue => ScoredValue.just(scoreWithValue.score, scoreWithValue.value)): _*)).map(Long2long)
   }
 
+  override def zAdd(key: K, args: Set[ZAddOptions], values: ScoreWithValue[V]*): Future[Long] = {
+    delegateRedisClusterCommandAndLift(_.zadd(key, LettuceRedisSortedSetAsyncCommands.zAddOptionsToJava(args), values.map(scoreWithValue => ScoredValue.just(scoreWithValue.score, scoreWithValue.value)): _*)).map(Long2long)
+  }
+
+  override def zAddIncr(key: K, score: Double, member: V): Future[Option[Double]] =
+    delegateRedisClusterCommandAndLift(_.zaddincr(key, score, member)).map(Option(_).map(Double2double))
+
+  override def zAddIncr(key: K, args: Set[ZAddOptions], score: Double, member: V): Future[Option[Double]] = {
+    delegateRedisClusterCommandAndLift(_.zaddincr(key, LettuceRedisSortedSetAsyncCommands.zAddOptionsToJava(args), score, member)).map(Option(_).map(Double2double))
+  }
+
+  override def zCard(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.zcard(key)).map(Long2long)
+
+  override def zCount[T: Numeric](key: K, range: ZRange[T]): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.zcount(key, toJavaNumberRange(range))).map(Long2long)
+
+  override def zPopMin(key: K): Future[Option[ScoreWithValue[V]]] =
+    delegateRedisClusterCommandAndLift(_.zpopmin(key)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithValue(scoredValue.getScore, scoredValue.getValue))
+      case _ => None
+    }
+
   override def zPopMin(key: K, count: Long): Future[List[ScoreWithValue[V]]] =
-    delegateRedisClusterCommandAndLift(_.zpopmin(key, count)).map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+    delegateRedisClusterCommandAndLift(_.zpopmin(key, count)).map(_.asScala.toList.collect {
+      case scoredValue if scoredValue.hasValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)
+    })
+
+  override def zPopMax(key: K): Future[Option[ScoreWithValue[V]]] =
+    delegateRedisClusterCommandAndLift(_.zpopmax(key)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue => Some(ScoreWithValue(scoredValue.getScore, scoredValue.getValue))
+      case _ => None
+    }
 
   override def zPopMax(key: K, count: Long): Future[List[ScoreWithValue[V]]] =
-    delegateRedisClusterCommandAndLift(_.zpopmax(key, count)).map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+    delegateRedisClusterCommandAndLift(_.zpopmax(key, count)).map(_.asScala.toList.collect {
+      case scoredValue if scoredValue.hasValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)
+    })
+
+  override def zScore(key: K, value: V): Future[Option[Double]] =
+    delegateRedisClusterCommandAndLift(_.zscore(key, value)).map(Option(_).map(Double2double))
+
+  override def zRange(key: K, start: Long, stop: Long): Future[List[V]] =
+    delegateRedisClusterCommandAndLift(_.zrange(key, start, stop)).map(_.asScala.toList)
 
   override def zRangeByScore[T: Numeric](key: K, range: ZRange[T], limit: Option[RangeLimit] = None): Future[List[V]] =
     limit match {
@@ -44,6 +100,16 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
         delegateRedisClusterCommandAndLift(_.zrangebyscore(key, toJavaNumberRange(range))).map(_.asScala.toList)
     }
 
+  override def zRangeByScoreWithScores[T: Numeric](key: K, range: ZRange[T], limit: Option[RangeLimit] = None): Future[List[ScoreWithValue[V]]] =
+    limit match {
+      case Some(rangeLimit) =>
+        delegateRedisClusterCommandAndLift(_.zrangebyscoreWithScores(key, toJavaNumberRange(range), Limit.create(rangeLimit.offset, rangeLimit.count)))
+          .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+      case None =>
+        delegateRedisClusterCommandAndLift(_.zrangebyscoreWithScores(key, toJavaNumberRange(range)))
+          .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+    }
+
   override def zRevRangeByScore[T: Numeric](key: K, range: ZRange[T], limit: Option[RangeLimit] = None): Future[List[V]] =
     limit match {
       case Some(rangeLimit) =>
@@ -51,6 +117,35 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
       case None =>
         delegateRedisClusterCommandAndLift(_.zrevrangebyscore(key, toJavaNumberRange(range))).map(_.asScala.toList)
     }
+
+  override def zRevRangeByScoreWithScores[T: Numeric](
+    key: K,
+    range: ZRange[T],
+    limit: Option[RangeLimit] = None
+  ): Future[List[ScoreWithValue[V]]] =
+    limit match {
+      case Some(rangeLimit) =>
+        delegateRedisClusterCommandAndLift(_.zrevrangebyscoreWithScores(key, toJavaNumberRange(range), Limit.create(rangeLimit.offset, rangeLimit.count)))
+          .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+      case None =>
+        delegateRedisClusterCommandAndLift(_.zrevrangebyscoreWithScores(key, toJavaNumberRange(range)))
+          .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+    }
+
+  override def zIncrBy(key: K, amount: Double, value: V): Future[Double] =
+    delegateRedisClusterCommandAndLift(_.zincrby(key, amount, value)).map(Double2double)
+
+  override def zRank(key: K, value: V): Future[Option[Long]] =
+    delegateRedisClusterCommandAndLift(_.zrank(key, value)).map(Option(_).map(Long2long))
+
+  override def zRankWithScore(key: K, value: V): Future[Option[ScoreWithValue[Long]]] =
+    delegateRedisClusterCommandAndLift(_.zrankWithScore(key, value)).map(Option(_).map(scoredValue => ScoreWithValue[Long](scoredValue.getScore, scoredValue.getValue)))
+
+  override def zRevRank(key: K, value: V): Future[Option[Long]] =
+    delegateRedisClusterCommandAndLift(_.zrevrank(key, value)).map(Option(_).map(Long2long))
+
+  override def zRevRankWithScore(key: K, value: V): Future[Option[ScoreWithValue[Long]]] =
+    delegateRedisClusterCommandAndLift(_.zrevrankWithScore(key, value)).map(Option(_).map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
 
   override def zRangeWithScores(key: K, start: Long, stop: Long): Future[List[ScoreWithValue[V]]] =
     delegateRedisClusterCommandAndLift(_.zrangeWithScores(key, start, stop))
@@ -88,6 +183,18 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
     }
   }
 
+  override def zRandMember(key: K): Future[Option[V]] =
+    delegateRedisClusterCommandAndLift(_.zrandmember(key)).map(Option(_))
+
+  override def zRandMember(key: K, count: Long): Future[List[V]] =
+    delegateRedisClusterCommandAndLift(_.zrandmember(key, count)).map(_.asScala.toList)
+
+  override def zRandMemberWithScores(key: K): Future[Option[ScoreWithValue[V]]] =
+    delegateRedisClusterCommandAndLift(_.zrandmemberWithScores(key)).map(Option(_).map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+
+  override def zRandMemberWithScores(key: K, count: Long): Future[List[ScoreWithValue[V]]] =
+    delegateRedisClusterCommandAndLift(_.zrandmemberWithScores(key, count)).map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
+
   override def zRem(key: K, values: V*): Future[Long] =
     delegateRedisClusterCommandAndLift(_.zrem(key, values: _*)).map(Long2long)
 
@@ -96,6 +203,13 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
 
   override def zRemRangeByScore[T: Numeric](key: K, range: ZRange[T]): Future[Long] =
     delegateRedisClusterCommandAndLift(_.zremrangebyscore(key, toJavaNumberRange(range))).map(Long2long)
+
+  override def zRevRange(key: K, start: Long, stop: Long): Future[List[V]] =
+    delegateRedisClusterCommandAndLift(_.zrevrange(key, start, stop)).map(_.asScala.toList)
+
+  override def zRevRangeWithScores(key: K, start: Long, stop: Long): Future[List[ScoreWithValue[V]]] =
+    delegateRedisClusterCommandAndLift(_.zrevrangeWithScores(key, start, stop))
+      .map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
 
 }
 
@@ -110,5 +224,18 @@ private[this] object LettuceRedisSortedSetAsyncCommands{
       case _ => implicitly[Numeric[T]].toDouble(t)
     }
     Range.create(toJavaNumber(range.start), toJavaNumber(range.end))
+  }
+
+
+  private[commands] def zAddOptionsToJava(options: Set[ZAddOptions]): ZAddArgs = {
+    val args = new ZAddArgs()
+    options.foreach {
+      case ZAddOptions.NX => args.nx()
+      case ZAddOptions.XX => args.xx()
+      case ZAddOptions.CH => args.ch()
+      case ZAddOptions.GT => args.gt()
+      case ZAddOptions.LT => args.lt()
+    }
+    args
   }
 }
