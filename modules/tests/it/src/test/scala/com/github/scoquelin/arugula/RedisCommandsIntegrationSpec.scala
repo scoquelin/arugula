@@ -4,7 +4,7 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 
 import com.github.scoquelin.arugula.codec.RedisCodec
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
@@ -522,10 +522,18 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.zAdd(key1, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
             _ <- client.zAdd(key2, ScoreWithValue(4, "four"), ScoreWithValue(5, "five"), ScoreWithValue(6, "six"))
             _ <- client.zAdd(key3, ScoreWithValue(7, "seven"), ScoreWithValue(8, "eight"), ScoreWithValue(9, "nine"))
-            bzPopMin <- client.bzPopMin(0.1, key1, key2, key3)
+            bzPopMin <- client.bzPopMin(100.milliseconds, key1, key2, key3)
             _ <- bzPopMin shouldBe Some(ScoreWithKeyValue(1, key1, "one"))
-            bzPopMax <- client.bzPopMax(0.1, key3, key2, key1)
+            bzPopMax <- client.bzPopMax(100.milliseconds, key3, key2, key1)
             _ <- bzPopMax shouldBe Some(ScoreWithKeyValue(9, key3, "nine"))
+            bzMPop <- client.bzMPop(100.milliseconds, SortOrder.Min, key1, key2, key3)
+            _ <- bzMPop shouldBe Some(ScoreWithKeyValue(2, key1, "two"))
+            bzMpopWithCount <- client.bzMPop(100.milliseconds, 2, SortOrder.Max, key3, key2, key1)
+            _ <- bzMpopWithCount shouldBe List(ScoreWithKeyValue(8.0, key3, "eight"), ScoreWithKeyValue(7.0, key3, "seven"))
+            zMPop <- client.zMPop(SortOrder.Min, key2, key3)
+            _ <- zMPop shouldBe Some(ScoreWithKeyValue(4.0, key2, "four"))
+            zMPopWithCount <- client.zMPop(2, SortOrder.Max, key3, key2)
+            _ <- zMPopWithCount shouldBe List(ScoreWithKeyValue(6.0, key2, "six"), ScoreWithKeyValue(5.0, key2, "five"))
           } yield succeed
         }
       }

@@ -1,8 +1,9 @@
 package com.github.scoquelin.arugula.commands
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{SortOrder, RangeLimit, ScoreWithKeyValue, ScoreWithValue, ZAddOptions, ZRange}
 import io.lettuce.core.{Limit, Range, ScanArgs, ScoredValue, ZAddArgs}
 import scala.jdk.CollectionConverters._
 
@@ -13,31 +14,64 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
 
   import LettuceRedisSortedSetAsyncCommands.toJavaNumberRange
 
-  override def bzPopMin(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
-    delegateRedisClusterCommandAndLift(_.bzpopmin(timeout, keys: _*)).map {
+  override def bzMPop(timeout: FiniteDuration, direction: SortOrder, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] = {
+    val args = direction match {
+      case SortOrder.Min => io.lettuce.core.ZPopArgs.Builder.min()
+      case SortOrder.Max => io.lettuce.core.ZPopArgs.Builder.max()
+    }
+    delegateRedisClusterCommandAndLift(_.bzmpop(timeout.toMillis.toDouble / 1000, args, keys: _*)).map {
       case null => None
-      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+      case scoredValue if scoredValue.hasValue =>
+        if(scoredValue.getValue.hasValue){
+          Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  override def bzMPop(timeout: FiniteDuration,
+    count: Int,
+    direction: SortOrder,
+    keys: K*): Future[List[ScoreWithKeyValue[K, V]]] = {
+    val args = direction match {
+      case SortOrder.Min => io.lettuce.core.ZPopArgs.Builder.min()
+      case SortOrder.Max => io.lettuce.core.ZPopArgs.Builder.max()
+    }
+    delegateRedisClusterCommandAndLift(_.bzmpop(timeout.toMillis.toDouble / 1000, count, args, keys: _*)).map{ result =>
+      if(result.hasValue){
+        val key = result.getKey
+        result.getValue.asScala.toList.collect{
+          case scoredValue if scoredValue.hasValue => ScoreWithKeyValue(scoredValue.getScore, key, scoredValue.getValue)
+        }
+      } else {
+        List.empty
+      }
+    }
+  }
+
+  override def bzPopMin(timeout: FiniteDuration, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmin(timeout.toMillis.toDouble / 1000, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue =>
+        if(scoredValue.getValue.hasValue){
+          Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+        } else {
+          None
+        }
       case _ => None
     }
 
-  override def bzPopMin(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
-    delegateRedisClusterCommandAndLift(_.bzpopmin(timeout, keys: _*)).map {
+  override def bzPopMax(timeout: FiniteDuration, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
+    delegateRedisClusterCommandAndLift(_.bzpopmax(timeout.toMillis.toDouble/1000, keys: _*)).map {
       case null => None
-      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
-      case _ => None
-    }
-
-  override def bzPopMax(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
-    delegateRedisClusterCommandAndLift(_.bzpopmax(timeout, keys: _*)).map {
-      case null => None
-      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
-      case _ => None
-    }
-
-  override def bzPopMax(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] =
-    delegateRedisClusterCommandAndLift(_.bzpopmax(timeout, keys: _*)).map {
-      case null => None
-      case scoredValue if scoredValue.hasValue => Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+      case scoredValue if scoredValue.hasValue =>
+        if(scoredValue.getValue.hasValue){
+          Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+        } else {
+          None
+        }
       case _ => None
     }
 
@@ -61,6 +95,40 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
 
   override def zCount[T: Numeric](key: K, range: ZRange[T]): Future[Long] =
     delegateRedisClusterCommandAndLift(_.zcount(key, toJavaNumberRange(range))).map(Long2long)
+
+  override def zMPop(direction: SortOrder, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] = {
+    val args = direction match {
+      case SortOrder.Min => io.lettuce.core.ZPopArgs.Builder.min()
+      case SortOrder.Max => io.lettuce.core.ZPopArgs.Builder.max()
+    }
+    delegateRedisClusterCommandAndLift(_.zmpop(args, keys: _*)).map {
+      case null => None
+      case scoredValue if scoredValue.hasValue =>
+        if(scoredValue.getValue.hasValue){
+          Some(ScoreWithKeyValue(scoredValue.getValue.getScore, scoredValue.getKey, scoredValue.getValue.getValue))
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  override def zMPop(count: Int, direction: SortOrder, keys: K*): Future[List[ScoreWithKeyValue[K, V]]] = {
+    val args = direction match {
+      case SortOrder.Min => io.lettuce.core.ZPopArgs.Builder.min()
+      case SortOrder.Max => io.lettuce.core.ZPopArgs.Builder.max()
+    }
+    delegateRedisClusterCommandAndLift(_.zmpop(count, args, keys: _*)).map{ result =>
+      if(result.hasValue){
+        val key = result.getKey
+        result.getValue.asScala.toList.collect{
+          case scoredValue if scoredValue.hasValue => ScoreWithKeyValue(scoredValue.getScore, key, scoredValue.getValue)
+        }
+      } else {
+        List.empty
+      }
+    }
+  }
 
   override def zPopMin(key: K): Future[Option[ScoreWithValue[V]]] =
     delegateRedisClusterCommandAndLift(_.zpopmin(key)).map {

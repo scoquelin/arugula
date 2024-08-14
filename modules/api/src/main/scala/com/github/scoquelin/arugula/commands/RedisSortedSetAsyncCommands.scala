@@ -2,6 +2,7 @@ package com.github.scoquelin.arugula.commands
 
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.{InitialCursor, ScanResults}
 
@@ -16,10 +17,29 @@ trait RedisSortedSetAsyncCommands[K, V] {
   /**
    * Remove and return the member with the lowest score from one or more sorted sets
    * @param timeout The timeout
+   * @param direction Which end of the sorted set to pop from, the min or max
+   * @param keys The keys
+   * @return The member removed based on the pop direction
+   */
+  def bzMPop(timeout: FiniteDuration, direction: SortOrder, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
+
+  /**
+   * Remove and return up to count members from the end of one or more sorted sets based on the pop direction (min or max)
+   * @param timeout The timeout
+   * @param count The number of members to pop
+   * @param direction Which end of the sorted set to pop from, the min or max
+   * @param keys The keys
+   * @return The members removed based on the pop direction
+   */
+  def bzMPop(timeout: FiniteDuration, count: Int, direction: SortOrder, keys: K*): Future[List[ScoreWithKeyValue[K,V]]]
+
+  /**
+   * Remove and return the member with the lowest score from one or more sorted sets
+   * @param timeout The timeout
    * @param keys The keys
    * @return The member with the lowest score, or None if the sets are empty
    */
-  def bzPopMin(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
+  def bzPopMin(timeout: FiniteDuration, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
 
   /**
    * Remove and return the member with the highest score from one or more sorted sets
@@ -27,23 +47,8 @@ trait RedisSortedSetAsyncCommands[K, V] {
    * @param keys The keys
    * @return The member with the highest score, or None if the sets are empty
    */
-  def bzPopMin(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
+  def bzPopMax(timeout: FiniteDuration, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
 
-  /**
-   * Remove and return the member with the highest score from one or more sorted sets
-   * @param timeout The timeout
-   * @param keys The keys
-   * @return The member with the highest score, or None if the sets are empty
-   */
-  def bzPopMax(timeout: Long, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
-
-  /**
-   * Remove and return the member with the highest score from one or more sorted sets
-   * @param timeout The timeout
-   * @param keys The keys
-   * @return The member with the highest score, or None if the sets are empty
-   */
-  def bzPopMax(timeout: Double, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
 
   /**
    * Add one or more members to a sorted set, or update its score if it already exists
@@ -109,6 +114,24 @@ trait RedisSortedSetAsyncCommands[K, V] {
    * @return The number of elements in the specified score range
    */
   def zCount[T: Numeric](key: K, range: ZRange[T]): Future[Long]
+
+  /**
+   * Remove and return a member from the end of one or more sorted sets based on the pop direction (min or max)
+   * @param direction The direction to pop from
+   *                     (min or max)
+   * @param keys The keys
+   * @return The member removed based on the pop direction
+   */
+  def zMPop(direction: SortOrder, keys: K*): Future[Option[ScoreWithKeyValue[K,V]]]
+
+  /**
+   * Remove and return up to count members from the end of one or more sorted sets based on the pop direction (min or max)
+   * @param count The number of members to pop
+   * @param direction The direction to pop from
+   * @param keys The keys
+   * @return The members removed based on the pop direction
+   */
+  def zMPop(count: Int, direction: SortOrder, keys: K*): Future[List[ScoreWithKeyValue[K,V]]]
 
   /**
    * Remove and return a member with the lowest score from a sorted set
@@ -329,7 +352,6 @@ trait RedisSortedSetAsyncCommands[K, V] {
 }
 
 // TODO : Implement the following commands:
-//bzmpop
 //zdiff
 //zdiffstore
 //zdiffWithScores
@@ -401,4 +423,11 @@ object RedisSortedSetAsyncCommands {
   final case class ScoreWithKeyValue[K, V](score: Double, key: K, value: V)
   final case class ZRange[T](start: T, end: T)
   final case class RangeLimit(offset: Long, count: Long)
+
+  sealed trait SortOrder
+
+  object SortOrder {
+    case object Min extends SortOrder
+    case object Max extends SortOrder
+  }
 }
