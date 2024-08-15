@@ -1,8 +1,10 @@
 package com.github.scoquelin.arugula
 
 
+import scala.concurrent.duration.DurationInt
+
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
 import io.lettuce.core.{KeyValue, RedisFuture, ScoredValue, ScoredValueScanCursor}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -19,17 +21,48 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
 
   "LettuceRedisSortedSetAsyncCommands" should {
 
+    "delegate BZMPOP command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: KeyValue[String, ScoredValue[String]] = KeyValue.just("key", ScoredValue.just(1.0, "one"))
+      val mockRedisFuture: RedisFuture[KeyValue[String, ScoredValue[String]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.bzmpop(any[Double],  any[io.lettuce.core.ZPopArgs], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.bzMPop(0.milliseconds,SortOrder.Min, "key").map { result =>
+        result mustBe Some(RedisSortedSetAsyncCommands.ScoreWithKeyValue(1.0, "key", "one"))
+        verify(lettuceAsyncCommands).bzmpop(meq(0.0), any[io.lettuce.core.ZPopArgs], meq("key"))
+        succeed
+      }
+    }
+
+    "delegate BZMPOP command with count to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+      val scoredValues = new java.util.ArrayList[ScoredValue[String]]
+      scoredValues.add(ScoredValue.just(1.0, "one"))
+      val expectedValue: KeyValue[String, java.util.List[ScoredValue[String]]] = KeyValue.just("key", scoredValues)
+      val mockRedisFuture: RedisFuture[KeyValue[String, java.util.List[ScoredValue[String]]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.bzmpop(any[Double], any[Int],  any[io.lettuce.core.ZPopArgs], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.bzMPop(0.milliseconds, 1, SortOrder.Min, "key").map { result =>
+        result mustBe List(RedisSortedSetAsyncCommands.ScoreWithKeyValue(1.0, "key", "one"))
+        verify(lettuceAsyncCommands).bzmpop(meq(0.0), meq(1), any[io.lettuce.core.ZPopArgs], meq("key"))
+        succeed
+      }
+    }
+
     "delegate BZPOPMIN command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
       val expectedValue: KeyValue[String,ScoredValue[String]] = KeyValue.just("key", ScoredValue.just(1.0, "one"))
       val mockRedisFuture: RedisFuture[KeyValue[String, ScoredValue[String]]] = mockRedisFutureToReturn(expectedValue)
 
-      when(lettuceAsyncCommands.bzpopmin(0, "key")).thenReturn(mockRedisFuture)
+      when(lettuceAsyncCommands.bzpopmin(0.0, "key")).thenReturn(mockRedisFuture)
 
-      testClass.bzPopMin(0, "key").map { result =>
+      testClass.bzPopMin(0.milliseconds, "key").map { result =>
         result mustBe Some(RedisSortedSetAsyncCommands.ScoreWithKeyValue(1.0, "key", "one"))
-        verify(lettuceAsyncCommands).bzpopmin(0, "key")
+        verify(lettuceAsyncCommands).bzpopmin(0.0, "key")
         succeed
       }
     }
@@ -135,6 +168,37 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       testClass.zCount("key", ZRange(0, 1)).map { result =>
         result mustBe expectedValue
         verify(lettuceAsyncCommands).zcount("key", io.lettuce.core.Range.create(0, 1))
+        succeed
+      }
+    }
+
+    "delegate ZMPOP command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: KeyValue[String, ScoredValue[String]] = KeyValue.just("key", ScoredValue.just(1.0, "one"))
+      val mockRedisFuture: RedisFuture[KeyValue[String, ScoredValue[String]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zmpop(any[io.lettuce.core.ZPopArgs], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.zMPop(SortOrder.Min, "key").map { result =>
+        result mustBe Some(RedisSortedSetAsyncCommands.ScoreWithKeyValue(1.0, "key", "one"))
+        verify(lettuceAsyncCommands).zmpop(any[io.lettuce.core.ZPopArgs], meq("key"))
+        succeed
+      }
+    }
+
+    "delegate ZMPOP command with count to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+      val scoredValues = new java.util.ArrayList[ScoredValue[String]]
+      scoredValues.add(ScoredValue.just(1.0, "one"))
+      val expectedValue: KeyValue[String, java.util.List[ScoredValue[String]]] = KeyValue.just("key", scoredValues)
+      val mockRedisFuture: RedisFuture[KeyValue[String, java.util.List[ScoredValue[String]]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zmpop(any[Int], any[io.lettuce.core.ZPopArgs], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.zMPop(1, SortOrder.Min, "key").map { result =>
+        result mustBe List(RedisSortedSetAsyncCommands.ScoreWithKeyValue(1.0, "key", "one"))
+        verify(lettuceAsyncCommands).zmpop(meq(1), any[io.lettuce.core.ZPopArgs], meq("key"))
         succeed
       }
     }
