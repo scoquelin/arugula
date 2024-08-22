@@ -4,7 +4,7 @@ import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 
 import com.github.scoquelin.arugula.codec.RedisCodec
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithKeyValue, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{Aggregate, AggregationArgs, RangeLimit, ScoreWithKeyValue, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
@@ -492,6 +492,10 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           val key = randomKey("sorted-set-incr")
           for {
             _ <- client.zAdd(key, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
+            zCard <- client.zCard(key)
+            _ <- zCard shouldBe 3L
+            zCount <- client.zCount(key, ZRange(0, 2))
+            _ <- zCount shouldBe 2L
             incrResult <- client.zIncrBy(key, 2, "two")
             _ <- incrResult shouldBe 4.0
             incrResult <- client.zIncrBy(key, 2, "four")
@@ -507,6 +511,8 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             zRevRankWithScore <- client.zRevRankWithScore(key, "four")
             _ <- zRevRankWithScore shouldBe Some(ScoreWithValue(2.0, 2))
             zAddIncr <- client.zAddIncr(key, ZAddOptions(ZAddOptions.XX), 2.9, "four")
+            zmScore <- client.zMScore(key, "four", "two")
+            _ <- zmScore shouldBe List(Some(4.9), Some(4.0))
             _ <- zAddIncr shouldBe Some(4.9)
           } yield succeed
         }
@@ -518,10 +524,13 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           val key1 = randomKey("sorted-set1") + suffix
           val key2 = randomKey("sorted-set2") + suffix
           val key3 = randomKey("sorted-set3") + suffix
+          val destination = randomKey("sorted-set-destination") + suffix
           for {
             _ <- client.zAdd(key1, ScoreWithValue(1, "one"), ScoreWithValue(2, "two"), ScoreWithValue(3, "three"))
             _ <- client.zAdd(key2, ScoreWithValue(4, "four"), ScoreWithValue(5, "five"), ScoreWithValue(6, "six"))
             _ <- client.zAdd(key3, ScoreWithValue(7, "seven"), ScoreWithValue(8, "eight"), ScoreWithValue(9, "nine"))
+            zrangeStore <- client.zRangeStore(destination, key1, 0, -1)
+            _ <- zrangeStore shouldBe 3L
             bzPopMin <- client.bzPopMin(100.milliseconds, key1, key2, key3)
             _ <- bzPopMin shouldBe Some(ScoreWithKeyValue(1, key1, "one"))
             bzPopMax <- client.bzPopMax(100.milliseconds, key3, key2, key1)
@@ -534,6 +543,65 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- zMPop shouldBe Some(ScoreWithKeyValue(4.0, key2, "four"))
             zMPopWithCount <- client.zMPop(2, SortOrder.Max, key3, key2)
             _ <- zMPopWithCount shouldBe List(ScoreWithKeyValue(6.0, key2, "six"), ScoreWithKeyValue(5.0, key2, "five"))
+
+
+          } yield succeed
+        }
+      }
+
+      "support lexographical range operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key = randomKey("sorted-set-lex") + suffix
+          val destination = randomKey("sorted-set-destination") + suffix
+          for {
+            _ <- client.zAdd(key, ScoreWithValue(1, "a"), ScoreWithValue(2, "b"), ScoreWithValue(3, "c"), ScoreWithValue(4, "d"), ScoreWithValue(5, "e"))
+            lexRange <- client.zRangeByLex(key, ZRange("a", "c"))
+            _ <- lexRange shouldBe List("a", "b", "c")
+            lexRange <- client.zRangeByLex(key, ZRange("a", "c"), Some(RangeLimit(0, 2)))
+            _ <- lexRange shouldBe List("a", "b")
+            revLexRange <- client.zRevRangeByLex(key, ZRange("a", "c"))
+            _ <- revLexRange shouldBe List("c", "b", "a")
+            _ <- client.zRangeStoreByLex(destination, key, ZRange("a", "c"))
+            destinationRange <- client.zRange(destination, 0, -1)
+            _ <- destinationRange shouldBe List("a", "b", "c")
+          } yield succeed
+        }
+      }
+
+      "support diff, inter and union operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("sorted-set1") + suffix
+          val key2 = randomKey("sorted-set2") + suffix
+          val key3 = randomKey("sorted-set3") + suffix
+          val destination = randomKey("sorted-set-destination") + suffix
+          for {
+            _ <- client.zAdd(key1, ScoreWithValue(1, "a"), ScoreWithValue(2, "b"), ScoreWithValue(3, "c"), ScoreWithValue(4, "d"), ScoreWithValue(5, "e"))
+            _ <- client.zAdd(key2, ScoreWithValue(1, "a"), ScoreWithValue(2, "b"), ScoreWithValue(3, "c"), ScoreWithValue(4, "d"), ScoreWithValue(5, "e"))
+            _ <- client.zAdd(key3, ScoreWithValue(1, "a"), ScoreWithValue(2, "b"), ScoreWithValue(3, "c"), ScoreWithValue(4, "d"), ScoreWithValue(5, "e"))
+            zInterStore <- client.zInterStore(destination, key1, key2, key3)
+            _ <- zInterStore shouldBe 5L
+            zInterCard <- client.zInterCard(key1, key2, key3)
+            _ <- zInterCard shouldBe 5L
+            zInterRange <- client.zRange(destination, 0, -1)
+            _ <- zInterRange shouldBe List("a", "b", "c", "d", "e")
+            zUnion <- client.zUnion(key1, key2)
+            _ <- zUnion shouldBe List("a", "b", "c", "d", "e")
+            zUnionWithScores <- client.zUnionWithScores(key1, key2)
+            _ <- zUnionWithScores shouldBe List(ScoreWithValue(2.0, "a"), ScoreWithValue(4.0, "b"), ScoreWithValue(6.0, "c"), ScoreWithValue(8.0, "d"), ScoreWithValue(10.0, "e"))
+            zUnionWithScoresAndWeights <- client.zUnionWithScores(AggregationArgs(weights = Seq(2.0, 3.0)), key1, key2)
+            _ <- zUnionWithScoresAndWeights shouldBe List(ScoreWithValue(5.0, "a"), ScoreWithValue(10.0, "b"), ScoreWithValue(15.0, "c"), ScoreWithValue(20.0, "d"), ScoreWithValue(25.0, "e"))
+            zUnionWithScoresMin <- client.zUnionWithScores(AggregationArgs(Aggregate.Min), key1, key2)
+            _ <- zUnionWithScoresMin shouldBe List(ScoreWithValue(1.0, "a"), ScoreWithValue(2.0, "b"), ScoreWithValue(3.0, "c"), ScoreWithValue(4.0, "d"), ScoreWithValue(5.0, "e"))
+            zUnionStore <- client.zUnionStore(destination, key1, key2, key3)
+            _ <- zUnionStore shouldBe 5L
+            zUnionRange <- client.zRange(destination, 0, -1)
+            _ <- zUnionRange shouldBe List("a", "b", "c", "d", "e")
+            zDiffStore <- client.zDiffStore(destination, key1, key2, key3)
+            _ <- zDiffStore shouldBe 0L
+            zDiffRange <- client.zRange(destination, 0, -1)
+            _ <- zDiffRange shouldBe List()
           } yield succeed
         }
       }

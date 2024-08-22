@@ -4,7 +4,7 @@ package com.github.scoquelin.arugula
 import scala.concurrent.duration.DurationInt
 
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{RangeLimit, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{Aggregate, RangeLimit, ScoreWithValue, SortOrder, ZAddOptions, AggregationArgs, ZRange}
 import io.lettuce.core.{KeyValue, RedisFuture, ScoredValue, ScoredValueScanCursor}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -172,6 +172,177 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       }
     }
 
+    "delegate ZDIFF command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zdiff("key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zDiff("key1", "key2").map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zdiff("key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZDIFFSTORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zdiffstore("destination", "key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zDiffStore("destination", "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zdiffstore("destination", "key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZDIFFWITHSCORES command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[ScoredValue[String]] = new java.util.ArrayList[ScoredValue[String]]
+      expectedValue.add(ScoredValue.just(1, "one"))
+      val mockRedisFuture: RedisFuture[java.util.List[ScoredValue[String]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zdiffWithScores("key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zDiffWithScores("key1", "key2").map { result =>
+        result mustBe List(ScoreWithValue(1, "one"))
+        verify(lettuceAsyncCommands).zdiffWithScores("key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZINTER command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinter("key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zInter("key1", "key2").map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zinter("key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZINTER command with weights to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinter(any[io.lettuce.core.ZStoreArgs], any[String], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.zInter(AggregationArgs(weights = Seq(1.0, 2.0)), "key1", "key2").map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zinter(any[io.lettuce.core.ZAggregateArgs], meq("key1"), meq("key2"))
+        succeed
+      }
+    }
+
+    "delegate ZINTER command with weights and AGGREGATE MIN to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinter(any[io.lettuce.core.ZStoreArgs], any[String], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.zInter(AggregationArgs(Aggregate.Min, weights = Seq(1.0, 2.0)), "key1", "key2").map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zinter(any[io.lettuce.core.ZAggregateArgs], meq("key1"), meq("key2"))
+        succeed
+      }
+    }
+
+    "delegate ZINTERCARD command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zintercard("key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zInterCard("key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zintercard("key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZINTERSTORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinterstore("destination", "key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zInterStore("destination", "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zinterstore("destination", "key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZINTERSTORE command with weights to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinterstore(any[String], any[io.lettuce.core.ZStoreArgs], any[String], any[String])).thenReturn(mockRedisFuture)
+
+      testClass.zInterStore("destination", AggregationArgs(weights = Seq(1.0, 2.0)), "key1", "key2").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zinterstore(meq("destination"), any[io.lettuce.core.ZStoreArgs], meq("key1"), meq("key2"))
+        succeed
+      }
+    }
+
+    "delegate ZINTERWITHSCORES command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[ScoredValue[String]] = new java.util.ArrayList[ScoredValue[String]]
+      expectedValue.add(ScoredValue.just(1, "one"))
+      val mockRedisFuture: RedisFuture[java.util.List[ScoredValue[String]]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zinterWithScores("key1", "key2")).thenReturn(mockRedisFuture)
+
+      testClass.zInterWithScores("key1", "key2").map { result =>
+        result mustBe List(ScoreWithValue(1, "one"))
+        verify(lettuceAsyncCommands).zinterWithScores("key1", "key2")
+        succeed
+      }
+    }
+
+    "delegate ZLEXCOUNT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zlexcount("key", io.lettuce.core.Range.create("b", "f"))).thenReturn(mockRedisFuture)
+
+      testClass.zLexCount("key", ZRange("b", "f")).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zlexcount("key", io.lettuce.core.Range.create("b", "f"))
+        succeed
+      }
+    }
+
     "delegate ZMPOP command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
@@ -235,6 +406,22 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       }
     }
 
+    "delegate ZRANGEBYLEX command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrangebylex("key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())).thenReturn(mockRedisFuture)
+
+      testClass.zRangeByLex("key", ZRange("b", "f"), None).map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zrangebylex("key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())
+        succeed
+      }
+    }
+
     "delegate ZRANGEBYSCORE command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
@@ -263,6 +450,51 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       testClass.zRange("key", 0, 0).map { result =>
         result mustBe List("one")
         verify(lettuceAsyncCommands).zrange("key", 0, 0)
+        succeed
+      }
+    }
+
+    "delegate ZRANGESTORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrangestore(meq("destination"), meq("key"), any[io.lettuce.core.Range[java.lang.Long]])).thenReturn(mockRedisFuture)
+
+      testClass.zRangeStore("destination", "key", 0, 1).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrangestore("destination", "key", io.lettuce.core.Range.create(0L, 1L))
+        succeed
+      }
+    }
+
+    "delegate ZRANGESTOREBYLEX command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrangestorebylex(meq("destination"), meq("key"), any[io.lettuce.core.Range[String]], any[io.lettuce.core.Limit])).thenReturn(mockRedisFuture)
+
+      testClass.zRangeStoreByLex("destination", "key", ZRange("b", "f")).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrangestorebylex("destination", "key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())
+        succeed
+      }
+    }
+
+    "delegate ZRANGESTOREBYSCORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrangestorebyscore(meq("destination"), meq("key"), any[io.lettuce.core.Range[java.lang.Number]], any[io.lettuce.core.Limit])).thenReturn(mockRedisFuture)
+
+      testClass.zRangeStoreByScore("destination", "key", ZRange(Double.NegativeInfinity, Double.PositiveInfinity)).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrangestorebyscore("destination", "key", io.lettuce.core.Range.create(Double.NegativeInfinity, Double.PositiveInfinity), io.lettuce.core.Limit.unlimited())
         succeed
       }
     }
@@ -392,6 +624,22 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       }
     }
 
+    "delegate ZMSCORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = new java.util.ArrayList[java.lang.Double]
+      expectedValue.add(0, 1.0)
+      val mockRedisFuture: RedisFuture[java.util.List[java.lang.Double]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zmscore("key", "one")).thenReturn(mockRedisFuture)
+
+      testClass.zMScore("key", "one").map { result =>
+        result mustBe List(Some(1.0))
+        verify(lettuceAsyncCommands).zmscore("key", "one")
+        succeed
+      }
+    }
+
     "delegate ZREVRANGE command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
@@ -404,6 +652,67 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       testClass.zRevRange("key", 0, 0).map { result =>
         result mustBe List("one")
         verify(lettuceAsyncCommands).zrevrange("key", 0, 0)
+        succeed
+      }
+    }
+
+    "delegate ZREVRANGESTORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrevrangestore(meq("destination"), meq("key"), any[io.lettuce.core.Range[java.lang.Long]]())).thenReturn(mockRedisFuture)
+
+      testClass.zRevRangeStore("destination", "key", 0, 1).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrevrangestore("destination", "key", io.lettuce.core.Range.create(0L, 1L))
+        succeed
+      }
+    }
+
+    "delegate ZREVRANGESTOREBYLEX command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrevrangestorebylex(meq("destination"), meq("key"), any[io.lettuce.core.Range[String]], any[io.lettuce.core.Limit])).thenReturn(mockRedisFuture)
+
+      testClass.zRevRangeStoreByLex("destination", "key", ZRange("b", "f")).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrevrangestorebylex("destination", "key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())
+        succeed
+      }
+    }
+
+    "delegate ZREVRANGESTOREBYSCORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrevrangestorebyscore(meq("destination"), meq("key"), any[io.lettuce.core.Range[java.lang.Number]], any[io.lettuce.core.Limit])).thenReturn(mockRedisFuture)
+
+      testClass.zRevRangeStoreByScore("destination", "key", ZRange(Double.NegativeInfinity, Double.PositiveInfinity)).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zrevrangestorebyscore("destination", "key", io.lettuce.core.Range.create(Double.NegativeInfinity, Double.PositiveInfinity), io.lettuce.core.Limit.unlimited())
+        succeed
+      }
+    }
+
+    "delegate ZREVRANGEBYLEX command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue: java.util.List[String] = new java.util.ArrayList[String]
+      expectedValue.add(0, "one")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zrevrangebylex("key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())).thenReturn(mockRedisFuture)
+
+      testClass.zRevRangeByLex("key", ZRange("b", "f"), None).map { result =>
+        result mustBe List("one")
+        verify(lettuceAsyncCommands).zrevrangebylex("key", io.lettuce.core.Range.create("b", "f"), io.lettuce.core.Limit.unlimited())
         succeed
       }
     }
@@ -532,6 +841,21 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       testClass.zRem("key", "value").map { result =>
         result mustBe expectedValue
         verify(lettuceAsyncCommands).zrem("key", "value")
+        succeed
+      }
+    }
+
+    "delegate ZREMRANGEBYLEX command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+
+      when(lettuceAsyncCommands.zremrangebylex("key", io.lettuce.core.Range.create("b", "f"))).thenReturn(mockRedisFuture)
+
+      testClass.zRemRangeByLex("key", ZRange("b", "f")).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).zremrangebylex("key", io.lettuce.core.Range.create("b", "f"))
         succeed
       }
     }
