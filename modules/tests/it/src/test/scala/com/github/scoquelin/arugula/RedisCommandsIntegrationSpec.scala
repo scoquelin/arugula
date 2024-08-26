@@ -358,7 +358,16 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- popped shouldBe Some("one")
             endState <- client.lRange(key, 0, -1)
             _ <- endState.isEmpty shouldBe true
-
+            _ <- client.lPush(key, "one", "two", "three")
+            _ <- client.lInsert(key, before = true, "two", "1.5")
+            range <- client.lRange(key, 0, -1)
+            _ <- range shouldBe List("three", "1.5", "two", "one")
+            lPushXResult <- client.lPushX(key, "zero")
+            _ <- lPushXResult shouldBe 5L
+            lSetResult <- client.lSet(key, 1, "1.75")
+            _ <- lSetResult shouldBe ()
+            rPushXResult <- client.rPushX(key, "four")
+            _ <- rPushXResult shouldBe 6L
           } yield succeed
         }
       }
@@ -374,7 +383,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.lPush(key1, "one", "two", "three")
             _ <- client.lPush(key2, "four", "five", "six")
             _ <- client.lMove(key1, key2, RedisListAsyncCommands.Side.Left, RedisListAsyncCommands.Side.Right)
-            _ <- client.blMove(key1, key3, RedisListAsyncCommands.Side.Left, RedisListAsyncCommands.Side.Right, timeout = 0.1)
+            _ <- client.blMove(key1, key3, RedisListAsyncCommands.Side.Left, RedisListAsyncCommands.Side.Right, timeout = FiniteDuration(100, TimeUnit.MILLISECONDS))
             key1Range <- client.lRange(key1, 0, -1)
             _ <- key1Range shouldBe List("one")
             key2Range <- client.lRange(key2, 0, -1)
@@ -382,6 +391,36 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             key3Range <- client.lRange(key3, 0, -1)
             _ <- key3Range shouldBe List("two")
 
+          } yield succeed
+        }
+      }
+
+      "support pop operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key1 = randomKey("list-key1") + suffix
+          val destKey = randomKey("list-key2") + suffix
+          for {
+            _ <- client.lPush(key1, "one", "two", "three")
+            popResult <- client.lPop(key1)
+            _ <- popResult shouldBe Some("three")
+            key1Range <- client.lRange(key1, 0, -1)
+            _ <- key1Range shouldBe List("two", "one")
+            blPopResult <- client.blPop(timeout = FiniteDuration(1, TimeUnit.MILLISECONDS), key1)
+            _ <- blPopResult shouldBe Some((key1, "two"))
+            key1Range <- client.lRange(key1, 0, -1)
+            _ <- key1Range shouldBe List("one")
+            rPopResult <- client.rPop(key1)
+            _ <- rPopResult shouldBe Some("one")
+            _ <- client.rPush(key1, "one")
+            brPopResult <- client.brPop(timeout = FiniteDuration(1, TimeUnit.MILLISECONDS), key1)
+            _ <- brPopResult shouldBe Some((key1, "one"))
+            _ <- client.rPush(key1, "one")
+            brPopLPushResult <- client.brPopLPush(timeout = FiniteDuration(1, TimeUnit.MILLISECONDS), key1, destKey)
+            _ <- brPopLPushResult shouldBe Some("one")
+            _ <- client.rPush(key1, "one")
+            rPopLPushResult <- client.rPopLPush(key1, destKey)
+            _ <- rPopLPushResult shouldBe Some("one")
           } yield succeed
         }
       }
@@ -400,7 +439,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- key1Range shouldBe List("one")
             key2Range <- client.lRange(key2, 0, -1)
             _ <- key2Range shouldBe List("six", "five", "four")
-            blPopResult <- client.blMPop(List(key1, key2), count = 2, timeout = 0.1)
+            blPopResult <- client.blMPop(List(key1, key2), count = 2, timeout = FiniteDuration(1, TimeUnit.MILLISECONDS))
             _ <- blPopResult shouldBe Some((key1, List("one")))
             key1Range <- client.lRange(key1, 0, -1)
             _ <- key1Range shouldBe List()
