@@ -54,6 +54,53 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         }
       }
 
+      "support retrieving a random key" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          for {
+            _ <- client.set(randomKey("random-key1"), "value")
+            _ <- client.set(randomKey("random-key2"), "value")
+            randomKey <- client.randomKey()
+            _ <- randomKey should not be empty
+          } yield succeed
+        }
+      }
+
+      "support sorting keys" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key = randomKey("sort-key", suffix)
+          val destKey = randomKey("sorted-key", suffix)
+          val values = List("1", "3", "2")
+          for {
+            _ <- client.rPush(key, values: _*)
+            sorted <- client.sort(key, RedisKeyAsyncCommands.SortArgs(reversed = true))
+            _ <- sorted shouldBe List("3", "2", "1")
+            _ <- client.sortStore(key, destKey, RedisKeyAsyncCommands.SortArgs(reversed = true))
+            sorted <- client.lRange(destKey, 0, -1)
+            _ <- sorted shouldBe List("3", "2", "1")
+          } yield succeed
+        }
+      }
+
+      "support object commands" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("object-key")
+          for {
+            _ <- client.set(key, "value")
+            encoding <- client.objectEncoding(key)
+            _ <- encoding shouldBe "embstr"
+            // commenting out the following test because it returns this error:
+            // ERR An LFU maxmemory policy is not selected, access frequency not tracked.
+//            frequency <- client.objectFreq(key)
+//            _ <- frequency shouldBe 1L
+            idleTime <- client.objectIdleTime(key)
+            _ <- idleTime shouldBe 0L
+            refCount <- client.objectRefCount(key)
+            _ <- refCount shouldBe 1L
+          } yield succeed
+        }
+      }
+
       "copy a key to another key with additional arguments" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val suffix = "{user1}"
@@ -226,6 +273,15 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       "support scanning the keyspace" in {
         withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val prefix = randomKey("scan-key")
+
+          def scanAll(cursor: String, keys: List[String]): Future[List[String]] = {
+            client.scan(cursor = cursor, matchPattern = Some(prefix + "*")).flatMap { scanResult =>
+              val allKeys = scanResult.values.foldLeft(keys)(_ :+ _)
+              if (scanResult.finished) Future.successful(allKeys)
+              else scanAll(scanResult.cursor, allKeys)
+            }
+          }
+
           val key1 = prefix + "1"
           val key2 = prefix + "2"
           val key3 = prefix + "3"
@@ -233,9 +289,8 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.set(key1, "value")
             _ <- client.set(key2, "value")
             _ <- client.set(key3, "value")
-            scanResult <- client.scan(matchPattern = Some(prefix + "*"))
-            _ <- scanResult.values should contain allOf (key1, key2, key3)
-            _ <- scanResult.finished shouldBe true
+            keys <- scanAll(InitialCursor, List.empty)
+            _ <- keys should contain allOf (key1, key2, key3)
           } yield succeed
         }
       }
@@ -246,6 +301,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       "create, check, retrieve, and delete a key holding a Long value" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsLongCodec) { client =>
           val key = randomKey("long-key")
+          val newKey = randomKey("new-long-key")
           val value = 1L
 
           for {
@@ -259,7 +315,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- keyExists shouldBe true
             existingKeyAdded <- client.setNx(key, value) //noop since key already exists
             _ <- existingKeyAdded shouldBe false
-            newKeyAdded <- client.setNx("newKey", value)
+            newKeyAdded <- client.setNx(newKey, value)
             _ <- newKeyAdded shouldBe true
             keyValue <- client.get(key)
             _ <- keyValue match {
@@ -290,7 +346,8 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
       "create, check, retrieve, and delete a key holding a String value" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
-          val key = randomKey()
+          val key = randomKey("string-key")
+          val newKey = randomKey("new-string-key")
           val value = "value"
 
           for {
@@ -299,7 +356,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- keyExists shouldBe true
             existingKeyAdded <- client.setNx(key, value) //noop since key already exists
             _ <- existingKeyAdded shouldBe false
-            newKeyAdded <- client.setNx("newKey", value)
+            newKeyAdded <- client.setNx(newKey, value)
             _ <- newKeyAdded shouldBe true
             keyValue <- client.get(key)
             _ <- keyValue match {
@@ -870,6 +927,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       "create, retrieve, and delete a field with a string value for a hash key" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
           val key = randomKey("hash-key")
+          val newKey = randomKey("new-hash-key")
           val field = "field"
           val value = "value"
 
@@ -879,7 +937,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- keyExists shouldBe true
             existingKeyAdded <- client.hSetNx(key, field, value)
             _ <- existingKeyAdded shouldBe false
-            newKeyAdded <- client.hSetNx("newKey", field, value)
+            newKeyAdded <- client.hSetNx(newKey, field, value)
             _ <- newKeyAdded shouldBe true
             fieldValue <- client.hGet(key, field)
             _ <- fieldValue match {
@@ -1162,5 +1220,9 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 }
 
 object RedisCommandsIntegrationSpec{
-  def randomKey(prefix: String = "key"): String = s"$prefix-${java.util.UUID.randomUUID()}"
+
+  def randomKey(): String = randomKey("key")
+  def randomKey(prefix: String): String = s"$prefix-${java.util.UUID.randomUUID().toString}"
+
+  def randomKey(prefix: String , suffix: String): String = s"$prefix-${java.util.UUID.randomUUID().toString}-$suffix"
 }

@@ -3,8 +3,9 @@ package com.github.scoquelin.arugula
 import scala.concurrent.duration.{DurationInt, DurationLong}
 import scala.jdk.CollectionConverters.{CollectionHasAsScala, IterableHasAsJava}
 
+import com.github.scoquelin.arugula.commands.RedisKeyAsyncCommands
 import io.lettuce.core.RedisFuture
-import org.mockito.ArgumentMatchers.{anyInt, anyLong, anyString, any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{verify, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.{FutureOutcome, wordspec}
@@ -189,6 +190,32 @@ class LettuceRedisKeyAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wit
       }
     }
 
+    "delegate MIGRATE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn("OK")
+      when(lettuceAsyncCommands.migrate(anyString, anyInt, anyString, anyInt, anyLong)).thenReturn(mockRedisFuture)
+
+      testClass.migrate("host", 1, "key", 2, 1000.milliseconds).map { result =>
+        result mustBe ()
+        verify(lettuceAsyncCommands).migrate("host", 1, "key", 2, 1000)
+        succeed
+      }
+    }
+
+    "delegate MIGRATE command with arguments to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn("OK")
+      when(lettuceAsyncCommands.migrate(anyString, anyInt, anyInt, anyLong, any[io.lettuce.core.MigrateArgs[String]])).thenReturn(mockRedisFuture)
+
+      testClass.migrate("host", 1, 2, 1000.milliseconds, RedisKeyAsyncCommands.MigrationArgs[String](keys = List("key1", "key2"))).map { result =>
+        result mustBe ()
+        verify(lettuceAsyncCommands).migrate(meq("host"), meq(1), meq(2), meq(1000L), any[io.lettuce.core.MigrateArgs[String]])
+        succeed
+      }
+    }
+
     "delegate MOVE command to Lettuce and lift result into a Future" in { testContext =>
       import testContext._
 
@@ -199,6 +226,76 @@ class LettuceRedisKeyAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wit
       testClass.move("key", 1).map { result =>
         result mustBe expectedValue
         verify(lettuceAsyncCommands).move("key", 1)
+        succeed
+      }
+    }
+
+    "delegate OBJECT ENCODING command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = "encoding"
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.objectEncoding(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.objectEncoding("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).objectEncoding("key")
+        succeed
+      }
+    }
+
+    "delegate OBJECT FREQUENCY command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.objectFreq(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.objectFreq("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).objectFreq("key")
+        succeed
+      }
+    }
+
+    "delegate OBJECT IDLETIME command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.objectIdletime(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.objectIdleTime("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).objectIdletime("key")
+        succeed
+      }
+    }
+
+    "delegate OBJECT REFCOUNT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 1L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.objectRefcount(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.objectRefCount("key").map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).objectRefcount("key")
+        succeed
+      }
+    }
+
+    "delegate RANDOMKEY command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = "key"
+      val mockRedisFuture: RedisFuture[String] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.randomkey()).thenReturn(mockRedisFuture)
+
+      testClass.randomKey().map { result =>
+        result mustBe Some(expectedValue)
+        verify(lettuceAsyncCommands).randomkey()
         succeed
       }
     }
@@ -275,6 +372,76 @@ class LettuceRedisKeyAsyncCommandsSpec extends wordspec.FixtureAsyncWordSpec wit
         result.finished mustBe true
         result.values mustBe empty
         verify(lettuceAsyncCommands).scan(any[io.lettuce.core.ScanCursor], any[io.lettuce.core.ScanArgs])
+        succeed
+      }
+    }
+
+    "delegate SORT command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = java.util.List.of("value1", "value2")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.sort(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.sort("key").map { result =>
+        result mustBe expectedValue.asScala.toList
+        verify(lettuceAsyncCommands).sort("key")
+        succeed
+      }
+    }
+
+    "delegate SORT command with arguments to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = java.util.List.of("value1", "value2")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.sort(anyString, any[io.lettuce.core.SortArgs])).thenReturn(mockRedisFuture)
+
+      testClass.sort("key", RedisKeyAsyncCommands.SortArgs(by = Option("test*"))).map { result =>
+        result mustBe expectedValue.asScala.toList
+        verify(lettuceAsyncCommands).sort(meq("key"), any[io.lettuce.core.SortArgs])
+        succeed
+      }
+    }
+
+    "delegate SORT_RO command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = java.util.List.of("value1", "value2")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.sortReadOnly(anyString)).thenReturn(mockRedisFuture)
+
+      testClass.sortReadOnly("key").map { result =>
+        result mustBe expectedValue.asScala.toList
+        verify(lettuceAsyncCommands).sortReadOnly("key")
+        succeed
+      }
+    }
+
+    "delegate SORT_RO command with arguments to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = java.util.List.of("value1", "value2")
+      val mockRedisFuture: RedisFuture[java.util.List[String]] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.sortReadOnly(anyString, any[io.lettuce.core.SortArgs])).thenReturn(mockRedisFuture)
+
+      testClass.sortReadOnly("key", RedisKeyAsyncCommands.SortArgs(by = Option("test*"))).map { result =>
+        result mustBe expectedValue.asScala.toList
+        verify(lettuceAsyncCommands).sortReadOnly(meq("key"), any[io.lettuce.core.SortArgs])
+        succeed
+      }
+    }
+
+    "delegate SORTSTORE command to Lettuce and lift result into a Future" in { testContext =>
+      import testContext._
+
+      val expectedValue = 2L
+      val mockRedisFuture: RedisFuture[java.lang.Long] = mockRedisFutureToReturn(expectedValue)
+      when(lettuceAsyncCommands.sortStore(anyString, any[io.lettuce.core.SortArgs], anyString)).thenReturn(mockRedisFuture)
+
+      testClass.sortStore("key", "destKey", RedisKeyAsyncCommands.SortArgs(by = Option("test*"))).map { result =>
+        result mustBe expectedValue
+        verify(lettuceAsyncCommands).sortStore(meq("key"), any[io.lettuce.core.SortArgs], meq("destKey"))
         succeed
       }
     }
