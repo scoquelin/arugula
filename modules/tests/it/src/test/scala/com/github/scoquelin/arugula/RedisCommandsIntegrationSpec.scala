@@ -9,9 +9,10 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
-import com.github.scoquelin.arugula.commands.RedisListAsyncCommands
+import com.github.scoquelin.arugula.commands.{RedisKeyAsyncCommands, RedisListAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with Matchers {
@@ -31,15 +32,229 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
     }
 
+    "leveraging RedisKeyAsyncCommands" should {
+
+      "copy a key to another key" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val srcKey = randomKey("src-key") + suffix
+          val destKey = randomKey("dest-key") + suffix
+          val value = "value"
+
+          for {
+            _ <- client.set(srcKey, value)
+            copied <- client.copy(srcKey, destKey)
+            _ <- copied shouldBe true
+            destValue <- client.get(destKey)
+            _ <- destValue match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+          } yield succeed
+        }
+      }
+
+      "copy a key to another key with additional arguments" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val srcKey = randomKey("src-key") + suffix
+          val destKey = randomKey("dest-key") + suffix
+          val value = "value"
+
+          for {
+            _ <- client.set(srcKey, value)
+            _ <- client.set(destKey, "other-value")
+            _ <- client.copy(srcKey, destKey, RedisKeyAsyncCommands.CopyArgs(replace = true))
+            destValue <- client.get(destKey)
+            _ <- destValue match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+          } yield succeed
+        }
+      }
+
+      "delete one or more keys" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key1 = randomKey("key1")
+          val key2 = randomKey("key2")
+          val key3 = randomKey("key3")
+          val value = "value"
+
+          for {
+            _ <- client.set(key1, value)
+            _ <- client.set(key2, value)
+            _ <- client.set(key3, value)
+            deleted <- client.del(key1, key2, key3)
+            _ <- deleted shouldBe 3L
+            key1Exists <- client.exists(key1)
+            _ <- key1Exists shouldBe false
+            key2Exists <- client.exists(key2)
+            _ <- key2Exists shouldBe false
+            key3Exists <- client.exists(key3)
+            _ <- key3Exists shouldBe false
+            _ <- client.set(key1, value)
+            unlinkResult <- client.unlink(key1)
+            _ <- unlinkResult shouldBe 1L
+            key1Exists <- client.exists(key1)
+            _ <- key1Exists shouldBe false
+          } yield succeed
+        }
+      }
+
+      "determine if a key exists" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey()
+          val value = "value"
+
+          for {
+            keyExists <- client.exists(key)
+            _ <- keyExists shouldBe false
+            _ <- client.set(key, value)
+            keyExists <- client.exists(key)
+            _ <- keyExists shouldBe true
+          } yield succeed
+        }
+      }
+
+      "set a key's time to live in seconds" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey()
+          val value = "value"
+          val expireIn = 30.minutes
+
+          for {
+            _ <- client.set(key, value)
+            _ <- client.expire(key, expireIn)
+            ttl <- client.ttl(key)
+            _ <- ttl match {
+              case Some(timeToLive) => assert(timeToLive > (expireIn - 1.minute) && timeToLive <= expireIn)
+              case None => fail("Expected time to live not found")
+            }
+            expireAtResult <- client.expireAt(key, Instant.now.plusSeconds(60))
+            _ <- expireAtResult shouldBe true
+            ttl <- client.ttl(key)
+            _ <- ttl match {
+              case Some(timeToLive) => assert(timeToLive > 0.seconds && timeToLive <= 60.seconds)
+              case None => fail("Expected time to live not found")
+            }
+            expireTime <- client.expireTime(key)
+            _ <- expireTime match {
+              case Some(expiration) => assert(expiration.isAfter(Instant.now.plusSeconds(55)) && expiration.isBefore(Instant.now.plusSeconds(65)))
+              case None => fail("Expected expiration time not found")
+            }
+          } yield succeed
+        }
+      }
+
+      "rename a key" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val suffix = "{user1}"
+          val key = randomKey("key") + suffix
+          val newKey = randomKey("new") + suffix
+          val value = "value"
+          for {
+            _ <- client.set(key, value)
+            _ <- client.rename(key, newKey)
+            keyExists <- client.exists(key)
+            _ <- keyExists shouldBe false
+            result <- client.get(newKey)
+            _ <- result match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+            _ <- client.set(key, "other-value")
+            renamed <- client.renameNx(key, newKey)
+            _ <- renamed shouldBe false
+          } yield succeed
+        }
+      }
+
+      "list keys with a pattern" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val prefix = randomKey("key")
+          val key1 = prefix + "1"
+          val key2 = prefix + "2"
+          val key3 = prefix + "3"
+          for {
+            _ <- client.set(key1, "value")
+            _ <- client.set(key2, "value")
+            _ <- client.set(key3, "value")
+            keys <- client.keys(prefix + "*")
+            _ <- keys should contain allOf (key1, key2, key3)
+          } yield succeed
+        }
+      }
+
+      "dump and restore a key" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("dump-key")
+          val value = "value"
+          for {
+            _ <- client.set(key, value)
+            dumped <- client.dump(key)
+            _ <- client.del(key)
+            _ <- client.restore(key, dumped, RedisKeyAsyncCommands.RestoreArgs(
+              ttl = Some(FiniteDuration(1, TimeUnit.HOURS))
+            ))
+            restored <- client.get(key)
+            _ <- restored match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
+            ttl <- client.ttl(key)
+            _ <- ttl match {
+              case Some(timeToLive) => assert(timeToLive > 30.minutes && timeToLive <= 65.minutes)
+              case None => fail("Expected time to live not found")
+            }
+            _ <- client.restore(key, dumped, RedisKeyAsyncCommands.RestoreArgs(
+              replace = true,
+              absTtl = Some(Instant.now.plusSeconds(60)),
+              frequency = Some(5)
+            ))
+
+            ttl <- client.ttl(key)
+            _ <- ttl match {
+              case Some(timeToLive) => assert(timeToLive > 30.seconds && timeToLive <= 65.seconds, s"Time to live was $timeToLive")
+              case None => fail("Expected time to live not found")
+            }
+
+          } yield succeed
+        }
+      }
+
+      "support scanning the keyspace" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val prefix = randomKey("scan-key")
+          val key1 = prefix + "1"
+          val key2 = prefix + "2"
+          val key3 = prefix + "3"
+          for {
+            _ <- client.set(key1, "value")
+            _ <- client.set(key2, "value")
+            _ <- client.set(key3, "value")
+            scanResult <- client.scan(matchPattern = Some(prefix + "*"))
+            _ <- scanResult.values should contain allOf (key1, key2, key3)
+            _ <- scanResult.finished shouldBe true
+          } yield succeed
+        }
+      }
+    }
+
     "leveraging RedisStringAsyncCommands" should {
 
       "create, check, retrieve, and delete a key holding a Long value" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsLongCodec) { client =>
-          val key = randomKey()
+          val key = randomKey("long-key")
           val value = 1L
 
           for {
             _ <- client.set(key, value)
+            result <- client.get(key)
+            _ <- result match {
+              case Some(expectedValue) => expectedValue shouldBe value
+              case None => fail("Expected value not found")
+            }
             keyExists <- client.exists(key)
             _ <- keyExists shouldBe true
             existingKeyAdded <- client.setNx(key, value) //noop since key already exists
@@ -51,6 +266,10 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
               case Some(expectedValue) => expectedValue shouldBe value
               case None => fail("Expected value not found")
             }
+            touched <- client.touch(key)
+            _ <- touched shouldBe 1L
+            typeResult <- client.`type`(key)
+            _ <- typeResult shouldBe "string"
             deleted <- client.del(key)
             _ <- deleted shouldBe 1L
             keyExists <- client.exists(key)
