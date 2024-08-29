@@ -9,7 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
-import com.github.scoquelin.arugula.commands.{RedisKeyAsyncCommands, RedisListAsyncCommands}
+import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 
 import java.time.Instant
@@ -27,6 +27,15 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           for {
             response <- client.ping
             _ <- response shouldBe "PONG"
+          } yield succeed
+        }
+      }
+
+      "support ROLE command" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          for {
+            role <- client.role()
+            _ <- role shouldBe a[RedisBaseAsyncCommands.Role.Master]
           } yield succeed
         }
       }
