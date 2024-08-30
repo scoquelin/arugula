@@ -1,5 +1,8 @@
 package com.github.scoquelin.arugula
 
+import scala.concurrent.Future
+import scala.jdk.FunctionConverters.enrichAsJavaFunction
+
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import com.dimafeng.testcontainers.{DockerComposeContainer, ExposedService}
 import com.github.scoquelin.arugula.BaseRedisCommandsIntegrationSpec._
@@ -7,15 +10,12 @@ import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.config.LettuceRedisClientConfig
 import io.lettuce.core.internal.HostAndPort
 import io.lettuce.core.resource.{ClientResources, DnsResolvers, MappingSocketAddressResolver}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AsyncWordSpecLike
 import org.testcontainers.containers.wait.strategy.Wait
 
 import java.io.File
-import scala.concurrent.Future
-import scala.jdk.FunctionConverters.enrichAsJavaFunction
 
-trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContainerForAll with BeforeAndAfterEach {
+trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContainerForAll {
   var cachedClients: CachedClients = null
 
   override val containerDef: DockerComposeContainer.Def = {
@@ -55,12 +55,6 @@ trait BaseRedisCommandsIntegrationSpec extends AsyncWordSpecLike with TestContai
     )
 
     cachedClients = RedisCommandsCachedClients(redisSingleNodeConfig, redisClusterConfig)
-  }
-
-  override def afterEach(): Unit = {
-    //flushing both redis instances after each test
-    cachedClients.getClient(RedisCodec.Utf8WithValueAsStringCodec, SingleNode).flushAll
-    cachedClients.getClient(RedisCodec.Utf8WithValueAsStringCodec, Cluster).flushAll
   }
 
   def withRedisSingleNode[K, V, A](codec: RedisCodec[K, V])(runTest: RedisCommandsClient[K, V] => Future[A]): Future[A] = {

@@ -57,8 +57,45 @@ private[arugula] trait LettuceRedisKeyAsyncCommands[K, V] extends RedisKeyAsyncC
   override def keys(pattern: K): Future[List[K]] =
     delegateRedisClusterCommandAndLift(_.keys(pattern)).map(_.toList)
 
+  override def migrate(
+    host: String,
+    port: Int,
+    key: K,
+    destinationDb: Int,
+    timeout: FiniteDuration,
+  ): Future[Unit] = {
+    delegateRedisClusterCommandAndLift(_.migrate(host, port, key, destinationDb, timeout.toMillis)).map(_ => ())
+  }
+
+  override def migrate(host: String, port: Int, destinationDb: Int, timeout: FiniteDuration, args: RedisKeyAsyncCommands.MigrationArgs[K]): Future[Unit] = {
+    val migrationArgs = io.lettuce.core.MigrateArgs.Builder.keys(args.keys: _*)
+    if(args.copy) migrationArgs.copy()
+    if(args.replace) migrationArgs.replace()
+    (args.username, args.password) match {
+      case (Some(username), Some(password)) => migrationArgs.auth2(username, password)
+      case (_, Some(password)) => migrationArgs.auth(password)
+      case _ => ()
+    }
+    delegateRedisClusterCommandAndLift(_.migrate(host, port, destinationDb, timeout.toMillis, migrationArgs)).map(_ => ())
+  }
+
   override def move(key: K, db: Int): Future[Boolean] =
     delegateRedisClusterCommandAndLift(_.move(key, db)).map(Boolean2boolean)
+
+  override def objectEncoding(key: K): Future[String] =
+    delegateRedisClusterCommandAndLift(_.objectEncoding(key))
+
+  override def objectFreq(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.objectFreq(key)).map(Long2long)
+
+  override def objectIdleTime(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.objectIdletime(key)).map(Long2long)
+
+  override def objectRefCount(key: K): Future[Long] =
+    delegateRedisClusterCommandAndLift(_.objectRefcount(key)).map(Long2long)
+
+  override def randomKey(): Future[Option[K]] =
+    delegateRedisClusterCommandAndLift(_.randomkey()).map(Option.apply)
 
   override def rename(key: K, newKey: K): Future[Unit] =
     delegateRedisClusterCommandAndLift(_.rename(key, newKey)).map(_ => ())
@@ -101,6 +138,30 @@ private[arugula] trait LettuceRedisKeyAsyncCommands[K, V] extends RedisKeyAsyncC
     }
   }
 
+  override def sort(key: K, sortArgs: RedisKeyAsyncCommands.SortArgs = RedisKeyAsyncCommands.SortArgs()): Future[List[V]] = {
+    if(sortArgs.isEmpty) {
+      delegateRedisClusterCommandAndLift(_.sort(key)).map(_.toList)
+    } else {
+      val args = LettuceRedisKeyAsyncCommands.sortArgsToJava(sortArgs)
+      delegateRedisClusterCommandAndLift(_.sort(key, args)).map(_.toList)
+    }
+
+  }
+
+  override def sortReadOnly(key: K, sortArgs: RedisKeyAsyncCommands.SortArgs = RedisKeyAsyncCommands.SortArgs()): Future[List[V]] = {
+    if(sortArgs.isEmpty) {
+      delegateRedisClusterCommandAndLift(_.sortReadOnly(key)).map(_.toList)
+    } else {
+      val args = LettuceRedisKeyAsyncCommands.sortArgsToJava(sortArgs)
+      delegateRedisClusterCommandAndLift(_.sortReadOnly(key, args)).map(_.toList)
+    }
+  }
+
+  override def sortStore(key: K, destKey: K, sortArgs: RedisKeyAsyncCommands.SortArgs): Future[Long] = {
+    val args = LettuceRedisKeyAsyncCommands.sortArgsToJava(sortArgs)
+    delegateRedisClusterCommandAndLift(_.sortStore(key, args, destKey)).map(Long2long)
+  }
+
   override def ttl(key: K): Future[Option[FiniteDuration]] =
     delegateRedisClusterCommandAndLift(_.pttl(key)).map(toFiniteDuration(TimeUnit.MILLISECONDS))
 
@@ -119,4 +180,16 @@ private[this] object LettuceRedisKeyAsyncCommands {
       case d if d < 0 => None
       case d => Some(FiniteDuration(d, units))
     }
+
+  private[commands] def sortArgsToJava(sortArgs: RedisKeyAsyncCommands.SortArgs): io.lettuce.core.SortArgs = {
+    val args = new io.lettuce.core.SortArgs()
+    sortArgs.by.foreach(args.by)
+    sortArgs.limit.foreach{
+      case (offset, count) => args.limit(offset, count)
+    }
+    if(sortArgs.alpha) args.alpha()
+    if(sortArgs.reversed) args.desc()
+    sortArgs.get.foreach(args.get)
+    args
+  }
 }
