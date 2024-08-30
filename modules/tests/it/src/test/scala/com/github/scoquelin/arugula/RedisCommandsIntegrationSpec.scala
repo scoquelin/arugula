@@ -9,7 +9,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
-import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands}
+import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisServerAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 
 import java.time.Instant
@@ -1204,6 +1204,56 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
         }
       }
 
+      "support getting memory usage for a key" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("memory-key")
+          val value = "value"
+          for {
+            _ <- client.set(key, value)
+            memoryUsage <- client.memoryUsage(key)
+            _ <- memoryUsage.isDefined shouldBe true
+          } yield succeed
+        }
+      }
+
+      "support client, command, and config operations" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          for {
+            clients <- client.clientList
+            _ <- clients.isEmpty shouldBe false
+            clientInfo <- client.clientInfo
+            _ <- clientInfo.idle shouldBe 0
+            _ <- clientInfo.db shouldBe 0
+            _ <- clientInfo.sub shouldBe 0
+            _ <- clientInfo.psub shouldBe 0
+            _ <- client.clientSetName("test-client")
+            clientName <- client.clientGetName
+            _ <- clientName shouldBe Some("test-client")
+            _ <- client.clientSetInfo("lib-name", "Arugula")
+            clientInfo <- client.clientInfo
+            _ <- clientInfo.name shouldBe "test-client"
+            _ <- client.clientNoEvict(enabled = true)
+            killResult <- client.clientKill(RedisServerAsyncCommands.KillArgs(
+              connectionType = Some(RedisServerAsyncCommands.ConnectionType.PubSub)
+            ))
+            _ <- killResult shouldBe 0L
+
+            _ <- client.clientTracking(RedisServerAsyncCommands.TrackingArgs(enabled=true))
+            cmd <- client.command
+            _ <- cmd.isEmpty shouldBe false
+            cmdCount <- client.commandCount
+            _ <- cmdCount shouldBe cmd.size
+            cmdInfo <- client.commandInfo("SET")
+            _ <- cmdInfo.nonEmpty shouldBe true
+            _ <- client.configSet("notify-keyspace-events", "AKE")
+            configGet <- client.configGet("notify-keyspace-events")
+            _ <- configGet shouldBe Map("notify-keyspace-events" -> "AKE")
+            _ <- client.configResetStat
+
+          } yield succeed
+        }
+      }
+
       "allow to flush all keys from all databases" in {
         //single node only for now as it produces a random error "READONLY You can't write against a read only replica" (port 7005) with the Redis cluster
         withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
@@ -1216,9 +1266,20 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.hSet(key, field, value)
             allKeysAfterUpdate <- client.hGetAll(key)
             _ <- allKeysAfterUpdate.size shouldBe 1
-            _ <- client.flushAll
+            _ <- client.flushAll()
             allKeysAfterFlushAll <- client.hGetAll(key)
             _ <- allKeysAfterFlushAll.isEmpty shouldBe true
+          } yield succeed
+        }
+      }
+
+      "support saving data to disk" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          for {
+            _ <- client.save
+            _ <- client.bgSave
+            _ <- client.lastSave
+            _ <- client.bgRewriteAof
           } yield succeed
         }
       }
