@@ -1,21 +1,24 @@
 package com.github.scoquelin.arugula
 
-import scala.collection.immutable.ListMap
+import scala.collection.immutable.{ListMap, Map}
 import scala.concurrent.Future
 
 import com.github.scoquelin.arugula.codec.RedisCodec
 import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{Aggregate, AggregationArgs, RangeLimit, ScoreWithKeyValue, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters.ListHasAsScala
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
-import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisServerAsyncCommands}
+import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisScriptingAsyncCommands, RedisServerAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
+import io.lettuce.core.{RedisCommandExecutionException, RedisCommandInterruptedException}
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with Matchers {
+
   import RedisCommandsIntegrationSpec.randomKey
 
   "RedisCommandsClient" when {
@@ -100,8 +103,8 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- encoding shouldBe "embstr"
             // commenting out the following test because it returns this error:
             // ERR An LFU maxmemory policy is not selected, access frequency not tracked.
-//            frequency <- client.objectFreq(key)
-//            _ <- frequency shouldBe 1L
+            //            frequency <- client.objectFreq(key)
+            //            _ <- frequency shouldBe 1L
             idleTime <- client.objectIdleTime(key)
             _ <- idleTime shouldBe 0L
             refCount <- client.objectRefCount(key)
@@ -237,7 +240,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.set(key2, "value")
             _ <- client.set(key3, "value")
             keys <- client.keys(prefix + "*")
-            _ <- keys should contain allOf (key1, key2, key3)
+            _ <- keys should contain allOf(key1, key2, key3)
           } yield succeed
         }
       }
@@ -299,7 +302,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.set(key2, "value")
             _ <- client.set(key3, "value")
             keys <- scanAll(InitialCursor, List.empty)
-            _ <- keys should contain allOf (key1, key2, key3)
+            _ <- keys should contain allOf(key1, key2, key3)
           } yield succeed
         }
       }
@@ -650,7 +653,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             lPushXResult <- client.lPushX(key, "zero")
             _ <- lPushXResult shouldBe 5L
             lSetResult <- client.lSet(key, 1, "1.75")
-            _ <- lSetResult shouldBe ()
+            _ <- lSetResult shouldBe()
             rPushXResult <- client.rPushX(key, "four")
             _ <- rPushXResult shouldBe 6L
           } yield succeed
@@ -1238,7 +1241,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             ))
             _ <- killResult shouldBe 0L
 
-            _ <- client.clientTracking(RedisServerAsyncCommands.TrackingArgs(enabled=true))
+            _ <- client.clientTracking(RedisServerAsyncCommands.TrackingArgs(enabled = true))
             cmd <- client.command
             _ <- cmd.isEmpty shouldBe false
             cmdCount <- client.commandCount
@@ -1286,6 +1289,42 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
 
     }
 
+
+    "leveraging RedisScriptingAsyncCommands" should {
+
+      "allow various scripting commands" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("script-key")
+          val hKey = randomKey("script-hash-key")
+          val value = "value"
+          for {
+            status <- client.eval("return redis.call('set', KEYS[1], ARGV[1])", RedisScriptingAsyncCommands.ScriptOutputType.Status, List(key), value)
+            _ <- status shouldBe "OK"
+            result <- client.get(key)
+            _ <- result shouldBe Some(value)
+            value <- client.eval("return redis.call('get', KEYS[1])", RedisScriptingAsyncCommands.ScriptOutputType.Value, key)
+            _ <- value shouldBe "value"
+            intValue <- client.eval("return 1", RedisScriptingAsyncCommands.ScriptOutputType.Integer)
+            _ <- intValue shouldBe 1
+            _ <- client.hMSet(hKey, Map("field1" -> "value1", "field2" -> "value2", "field3" -> "value3"))
+            hGetAllValues <- client.eval("return redis.call('hgetall', KEYS[1])", RedisScriptingAsyncCommands.ScriptOutputType.Multi, hKey)
+            _ <- hGetAllValues shouldBe List("field1", "value1", "field2", "value2", "field3", "value3")
+            sha <- client.scriptLoad("return redis.call('get', KEYS[1])")
+            _ <- sha.isBlank shouldBe false
+            result <- client.evalSha(sha, RedisScriptingAsyncCommands.ScriptOutputType.Value, key)
+            _ <- result shouldBe "value"
+            scriptExists <- client.scriptExists(sha)
+            _ <- scriptExists shouldBe true
+            _ <- client.scriptFlush(RedisScriptingAsyncCommands.FlushMode.Sync)
+            scriptExists <- client.scriptExists(sha)
+            _ <- scriptExists shouldBe false
+            _ <- client.scriptKill.failed.map(_ shouldBe a[RedisCommandExecutionException])
+            readOnlyResult <- client.evalReadOnly("return redis.call('get', KEYS[1])", RedisScriptingAsyncCommands.ScriptOutputType.Value, List(key))
+            _ <- readOnlyResult shouldBe "value"
+          } yield succeed
+        }
+      }
+    }
   }
 }
 
