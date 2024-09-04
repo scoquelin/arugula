@@ -1036,6 +1036,25 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
       }
     }
 
+    "leveraging RedisHLLAsyncCommands" should {
+      "add, count and merge HyperLogLog keys" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+
+          val key1 = randomKey("hll-key1", suffix = "{user1}")
+          val key2 = randomKey("hll-key2", suffix = "{user1}")
+          for {
+            _ <- client.pfAdd(key1, "a", "b", "c", "d", "e")
+            _ <- client.pfAdd(key2, "a", "b", "f", "g", "h")
+            count <- client.pfCount(key1, key2)
+            _ <- count shouldBe 8L
+            _ <- client.pfMerge(key1, key2)
+            count <- client.pfCount(key1)
+            _ <- count shouldBe 8L
+          } yield succeed
+        }
+      }
+    }
+
     "leveraging RedisSetAsyncCommands" should {
       "create, retrieve, pop, and remove values in a set" in {
         withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
