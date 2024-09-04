@@ -33,6 +33,7 @@ private[arugula] class LettuceRedisCommandsClient[K, V](
     with LettuceRedisHashAsyncCommands[K, V]
     with LettuceRedisServerAsyncCommands[K, V]
     with LettuceRedisListAsyncCommands[K, V]
+    with LettuceRedisScriptingAsyncCommands[K, V]
     with LettuceRedisStringAsyncCommands[K, V]
     with LettuceRedisSetAsyncCommands[K, V]
     with LettuceRedisSortedSetAsyncCommands[K, V]
