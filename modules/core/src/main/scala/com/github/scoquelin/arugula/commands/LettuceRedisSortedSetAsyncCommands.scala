@@ -106,7 +106,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
     delegateRedisClusterCommandAndLift(_.zdiffWithScores(keys: _*)).map(_.asScala.toList.map(scoredValue => ScoreWithValue(scoredValue.getScore, scoredValue.getValue)))
 
   override def zLexCount(key: K, range: ZRange[V]): Future[Long] = {
-    delegateRedisClusterCommandAndLift(_.zlexcount(key, Range.create(range.start, range.end))).map(Long2long)
+    delegateRedisClusterCommandAndLift(_.zlexcount(key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range))).map(Long2long)
   }
 
   override def zMPop(direction: SortOrder, keys: K*): Future[Option[ScoreWithKeyValue[K, V]]] = {
@@ -186,7 +186,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
       case Some(rangeLimit) => io.lettuce.core.Limit.create(rangeLimit.offset, rangeLimit.count)
       case None => io.lettuce.core.Limit.unlimited()
     }
-    delegateRedisClusterCommandAndLift(_.zrangestorebylex(destination, key, Range.create(range.start, range.end), args)).map(Long2long)
+    delegateRedisClusterCommandAndLift(_.zrangestorebylex(destination, key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range), args)).map(Long2long)
   }
 
   override def zRangeStoreByScore[T: Numeric](destination: K, key: K, range: ZRange[T], limit: Option[RangeLimit] = None): Future[Long] = {
@@ -222,7 +222,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
       case Some(rangeLimit) => io.lettuce.core.Limit.create(rangeLimit.offset, rangeLimit.count)
       case None => io.lettuce.core.Limit.unlimited()
     }
-    delegateRedisClusterCommandAndLift(_.zrevrangebylex(key, Range.create(range.start, range.end), args)).map(_.asScala.toList)
+    delegateRedisClusterCommandAndLift(_.zrevrangebylex(key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range), args)).map(_.asScala.toList)
   }
 
   override def zRevRangeByScore[T: Numeric](key: K, range: ZRange[T], limit: Option[RangeLimit] = None): Future[List[V]] =
@@ -296,7 +296,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
       case Some(rangeLimit) => io.lettuce.core.Limit.create(rangeLimit.offset, rangeLimit.count)
       case None => io.lettuce.core.Limit.unlimited()
     }
-    delegateRedisClusterCommandAndLift(_.zrangebylex(key, Range.create(range.start, range.end), args)).map(_.asScala.toList)
+    delegateRedisClusterCommandAndLift(_.zrangebylex(key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range), args)).map(_.asScala.toList)
   }
 
   override def zScan(key: K, cursor: String = InitialCursor, limit: Option[Long] = None, matchPattern: Option[String] = None): Future[ScanResults[List[ScoreWithValue[V]]]] = {
@@ -347,7 +347,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
     delegateRedisClusterCommandAndLift(_.zrem(key, values: _*)).map(Long2long)
 
   override def zRemRangeByLex(key: K, range: ZRange[V]): Future[Long] =
-    delegateRedisClusterCommandAndLift(_.zremrangebylex(key, Range.create(range.start, range.end))).map(Long2long)
+    delegateRedisClusterCommandAndLift(_.zremrangebylex(key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range))).map(Long2long)
 
   override def zRemRangeByRank(key: K, start: Long, stop: Long): Future[Long] =
     delegateRedisClusterCommandAndLift(_.zremrangebyrank(key, start, stop)).map(Long2long)
@@ -366,7 +366,7 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
       case Some(rangeLimit) => io.lettuce.core.Limit.create(rangeLimit.offset, rangeLimit.count)
       case None => io.lettuce.core.Limit.unlimited()
     }
-    delegateRedisClusterCommandAndLift(_.zrevrangestorebylex(destination, key, Range.create(range.start, range.end), args)).map(Long2long)
+    delegateRedisClusterCommandAndLift(_.zrevrangestorebylex(destination, key, LettuceRedisSortedSetAsyncCommands.toJavaRange(range), args)).map(Long2long)
   }
 
   override def zRevRangeStoreByScore[T: Numeric](destination: K,
@@ -409,8 +409,12 @@ private[arugula] trait LettuceRedisSortedSetAsyncCommands[K, V] extends RedisSor
 
 }
 
-private[this] object LettuceRedisSortedSetAsyncCommands{
-  private[commands] def toJavaNumberRange[T: Numeric](range: ZRange[T]): Range[Number] = {
+private[arugula] object LettuceRedisSortedSetAsyncCommands{
+  private[arugula] def toJavaNumberRange[T: Numeric](range: ZRange[T]): io.lettuce.core.Range[java.lang.Number] = {
+    io.lettuce.core.Range.from(toJavaNumberBoundary(range.lower), toJavaNumberBoundary(range.upper))
+  }
+
+  private[commands] def toJavaNumberBoundary[T: Numeric](boundary: RedisSortedSetAsyncCommands.ZRange.Boundary[T]): io.lettuce.core.Range.Boundary[java.lang.Number] = {
     def toJavaNumber(t: T): java.lang.Number = t match {
       case b: Byte => b
       case s: Short => s
@@ -419,7 +423,23 @@ private[this] object LettuceRedisSortedSetAsyncCommands{
       case f: Float => f
       case _ => implicitly[Numeric[T]].toDouble(t)
     }
-    Range.create(toJavaNumber(range.start), toJavaNumber(range.end))
+    boundary.value match {
+      case Some(value) if boundary.inclusive => io.lettuce.core.Range.Boundary.including(toJavaNumber(value))
+      case Some(value) => io.lettuce.core.Range.Boundary.excluding(toJavaNumber(value))
+      case None => io.lettuce.core.Range.Boundary.unbounded[java.lang.Number]()
+    }
+  }
+
+  private [arugula] def toJavaRange[T](range: ZRange[T]): io.lettuce.core.Range[T] = {
+    io.lettuce.core.Range.from[T](toJavaBoundary(range.lower), toJavaBoundary(range.upper))
+  }
+
+  private [commands] def toJavaBoundary[T](boundary: RedisSortedSetAsyncCommands.ZRange.Boundary[T]): io.lettuce.core.Range.Boundary[T] = {
+    boundary.value match {
+      case Some(value) if boundary.inclusive => io.lettuce.core.Range.Boundary.including(value)
+      case Some(value) => io.lettuce.core.Range.Boundary.excluding(value)
+      case None => io.lettuce.core.Range.Boundary.unbounded[T]()
+    }
   }
 
 
