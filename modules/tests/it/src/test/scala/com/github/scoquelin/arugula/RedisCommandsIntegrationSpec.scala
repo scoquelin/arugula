@@ -883,7 +883,7 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
           val destination = randomKey("sorted-set-destination") + suffix
           for {
             _ <- client.zAdd(key, ScoreWithValue(1, "a"), ScoreWithValue(2, "b"), ScoreWithValue(3, "c"), ScoreWithValue(4, "d"), ScoreWithValue(5, "e"))
-            lexRange <- client.zRangeByLex(key, ZRange("a", "c"))
+            lexRange <- client.zRangeByLex(key, ZRange(ZRange.Boundary.including("a"), ZRange.Boundary.including("c")))
             _ <- lexRange shouldBe List("a", "b", "c")
             lexRange <- client.zRangeByLex(key, ZRange("a", "c"), Some(RangeLimit(0, 2)))
             _ <- lexRange shouldBe List("a", "b")

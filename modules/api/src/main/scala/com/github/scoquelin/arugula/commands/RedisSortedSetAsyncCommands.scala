@@ -1,6 +1,7 @@
 package com.github.scoquelin.arugula.commands
 
 
+import scala.collection.immutable.NumericRange.Inclusive
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
@@ -672,11 +673,106 @@ object RedisSortedSetAsyncCommands {
   /**
    * A range of values
    *
-   * @param start The start value
-   * @param end The end value
+   * @param lower The lower bound
+   * @param upper The upper bound
    * @tparam T The value type
    */
-  final case class ZRange[T](start: T, end: T)
+  final case class ZRange[T](lower: ZRange.Boundary[T], upper: ZRange.Boundary[T])
+
+  object ZRange{
+    /**
+     * A boundary value, used for range queries (upper or lower bounds)
+     * @param value An optional value to use as the boundary. If None, it is unbounded.
+     * @param inclusive Whether the boundary is inclusive. default is false.
+     * @tparam T The value type
+     */
+    case class Boundary[T](value: Option[T] = None, inclusive: Boolean = false)
+
+    object Boundary{
+      /**
+       * Create a new inclusive boundary
+       * @param value The value
+       * @tparam T The value type
+       * @return The boundary
+       */
+      def including[T](value: T): Boundary[T] = Boundary(Some(value), inclusive = true)
+
+      /**
+       * Create a new exclusive boundary
+       * @param value The value
+       * @tparam T The value type
+       * @return The boundary
+       */
+      def excluding[T](value: T): Boundary[T] = Boundary(Some(value))
+
+      /**
+       * Create an unbounded boundary
+       * @tparam T The value type
+       * @return The boundary
+       */
+      def unbounded[T]: Boundary[T] = Boundary[T](None)
+    }
+
+    /**
+     * Create a new range
+     * @param lower The lower bound
+     * @param upper The upper bound
+     * @tparam T The value type
+     * @return The range
+     */
+    def apply[T](lower: T, upper: T): ZRange[T] = ZRange(Boundary.including(lower), Boundary.including(upper))
+
+    /**
+     * Create a new range
+     * @param lower The lower bound
+     * @param upper The upper bound
+     * @tparam T The value type
+     * @return The range
+     */
+    def including[T](lower: T, upper: T): ZRange[T] = ZRange(Boundary.including(lower), Boundary.including(upper))
+
+    /**
+     * Create a new range
+     * @param lower The lower bound
+     * @param upper The upper bound
+     * @tparam T The value type
+     * @return The range
+     */
+    def from[T](lower: T, upper: T, inclusive: Boolean = false): ZRange[T] = {
+      if(inclusive) ZRange(Boundary.including(lower), Boundary.including(upper))
+      else ZRange(Boundary.excluding(lower), Boundary.excluding(upper))
+    }
+
+
+    /**
+     * Create a new range from lower to unbounded
+     * @param lower The start boundary
+     * @tparam T The value type
+     * @return The range
+     */
+    def fromLower[T](lower: T, inclusive: Boolean = false): ZRange[T] = {
+      if(inclusive) ZRange(Boundary.including(lower), Boundary.unbounded[T])
+      else ZRange(Boundary.excluding(lower), Boundary.unbounded[T])
+    }
+
+    /**
+     * Create a new range to upper bound
+     * @param upper The upper boundary
+     * @tparam T The value type
+     * @return The range
+     */
+    def toUpper[T](upper: T, inclusive: Boolean = false): ZRange[T] = {
+      if(inclusive) ZRange(Boundary.unbounded[T], Boundary.including(upper))
+      else ZRange(Boundary.unbounded[T], Boundary.excluding(upper))
+    }
+
+    /**
+     * Create a new unbounded range
+     * @tparam T The value type
+     * @return The range
+     */
+    def unbounded[T]: ZRange[T] = new ZRange[T](Boundary.unbounded, Boundary.unbounded)
+  }
 
   /**
    * A range limit

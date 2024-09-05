@@ -3,8 +3,8 @@ package com.github.scoquelin.arugula
 
 import scala.concurrent.duration.DurationInt
 
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands
-import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{Aggregate, RangeLimit, ScoreWithValue, SortOrder, ZAddOptions, AggregationArgs, ZRange}
+import com.github.scoquelin.arugula.commands.{LettuceRedisSortedSetAsyncCommands, RedisSortedSetAsyncCommands}
+import com.github.scoquelin.arugula.commands.RedisSortedSetAsyncCommands.{Aggregate, AggregationArgs, RangeLimit, ScoreWithValue, SortOrder, ZAddOptions, ZRange}
 import io.lettuce.core.{KeyValue, RedisFuture, ScoredValue, ScoredValueScanCursor}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -952,4 +952,31 @@ class LettuceRedisSortedSetAsyncCommandsSpec extends wordspec.FixtureAsyncWordSp
       }
     }
   }
+
+  "LettuceRedisSortedSetAsyncCommands.toJavaNumberRange" should {
+    "convert a ZRange with Double.NegativeInfinity and Double.PositiveInfinity to a Range with Double.NEGATIVE_INFINITY and Double.POSITIVE_INFINITY" in { _ =>
+      val range = ZRange(Double.NegativeInfinity, Double.PositiveInfinity)
+      val result = LettuceRedisSortedSetAsyncCommands.toJavaNumberRange(range)
+      result mustBe io.lettuce.core.Range.create(Double.NegativeInfinity, Double.PositiveInfinity)
+    }
+
+    "convert a ZRange with a lower bound to a Range with the lower bound" in { _ =>
+      val range = ZRange.fromLower(1.0)
+      val result = LettuceRedisSortedSetAsyncCommands.toJavaNumberRange(range)
+      result mustBe io.lettuce.core.Range.from(io.lettuce.core.Range.Boundary.excluding(1.0), io.lettuce.core.Range.Boundary.unbounded())
+    }
+
+    "convert a ZRange with an upper bound to a Range with the upper bound" in { _ =>
+      val range = ZRange.toUpper(1.0)
+      val result = LettuceRedisSortedSetAsyncCommands.toJavaNumberRange(range)
+      result mustBe io.lettuce.core.Range.from(io.lettuce.core.Range.Boundary.unbounded(), io.lettuce.core.Range.Boundary.excluding(1.0))
+    }
+
+    "convert a ZRange excluding both bounds to a Range with the lower and upper bounds" in { _ =>
+      val range = ZRange.from(1.0, 2.0)
+      val result = LettuceRedisSortedSetAsyncCommands.toJavaNumberRange(range)
+      result mustBe io.lettuce.core.Range.from(io.lettuce.core.Range.Boundary.excluding(1.0), io.lettuce.core.Range.Boundary.excluding(2.0))
+    }
+  }
+
 }
