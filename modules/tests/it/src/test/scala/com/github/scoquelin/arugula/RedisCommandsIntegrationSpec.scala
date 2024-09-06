@@ -10,7 +10,8 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.ListHasAsScala
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
-import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisScriptingAsyncCommands, RedisServerAsyncCommands}
+import com.github.scoquelin.arugula.commands.RedisGeoAsyncCommands.{GeoCoordinates, GeoWithin}
+import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisGeoAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisScriptingAsyncCommands, RedisServerAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 import io.lettuce.core.{RedisCommandExecutionException, RedisCommandInterruptedException}
 
@@ -1168,6 +1169,90 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             scanResult <- scanAll()
             _ <- scanResult.size shouldEqual members.size
             _ <- scanResult shouldBe members.toSet
+          } yield succeed
+        }
+      }
+    }
+
+    "leveraging RedisGeoAsyncCommands" should {
+      val precision: Int = 6
+      def roundCoordinates(c: GeoCoordinates,
+      ): GeoCoordinates = {
+        c.copy(
+          latitude = BigDecimal(c.latitude).setScale(precision, BigDecimal.RoundingMode.HALF_UP).toDouble,
+          longitude = BigDecimal(c.longitude).setScale(precision, BigDecimal.RoundingMode.HALF_UP).toDouble
+        )
+      }
+
+      def roundWithin(
+        within: GeoWithin[String],
+      ): GeoWithin[String] = {
+        within.copy(
+          coordinates = within.coordinates.map(roundCoordinates)
+        )
+      }
+
+      "add and retrieve geo values" in {
+        withRedisSingleNodeAndCluster(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("geo", "{user1}")
+          val destKey = randomKey("geo-destination", "{user1}")
+          for {
+            addResult <- client.geoAdd(key, 13.361389338970184, 38.1155563954963, "Palermo")
+            _ <- addResult shouldBe 1L
+            addResult <- client.geoAdd(key, RedisGeoAsyncCommands.GeoValue("Catania", 15.087267458438873, 37.08727071557567))
+            _ <- addResult shouldBe 1L
+            addResultNX <- client.geoAdd(key, RedisGeoAsyncCommands.GeoAddArgs(nx = true), RedisGeoAsyncCommands.GeoValue("Catania", 15.087267458438873, 37.08727071557567))
+            _ <- addResultNX shouldBe 0L
+            results <- client.geoPos(key, List("Palermo", "Catania"))
+            _ <- results.size shouldBe 2
+            _ <- results.head.map(roundCoordinates) shouldBe Some(roundCoordinates(RedisGeoAsyncCommands.GeoCoordinates(13.361389338970184, 38.1155563954963)))
+            _ <- results(1).map(roundCoordinates) shouldBe Some(roundCoordinates(RedisGeoAsyncCommands.GeoCoordinates(15.087267458438873, 37.08727071557567)))
+            dist <- client.geoDist(key, "Palermo", "Catania", RedisGeoAsyncCommands.GeoUnit.Kilometers)
+            _ <- dist shouldBe Some(190.2873)
+            geoHashes <- client.geoHash(key, List("Palermo", "Catania"))
+            _ <- geoHashes.size shouldBe 2
+            _ <- geoHashes.head shouldBe Some("sqc8b49rny0")
+            _ <- geoHashes(1) shouldBe Some("sqddzrd1nb0")
+            radiusResults <- client.geoRadius(key, 15, 37, 200, RedisGeoAsyncCommands.GeoUnit.Kilometers)
+            _ <- radiusResults shouldBe Set("Palermo", "Catania")
+            radiusResultsWitData <- client.geoRadius(
+              key, 15, 37, 200, RedisGeoAsyncCommands.GeoUnit.Kilometers, RedisGeoAsyncCommands.GeoArgs(
+              withDistance = true, withHash = true, withCoordinates = true, count = Some(2), any = true, sort = Some(RedisGeoAsyncCommands.GeoArgs.Sort.Asc)
+            ))
+            _ <- radiusResultsWitData.size shouldBe 2
+            _ <- roundWithin(radiusResultsWitData.head) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Catania", Some(12.4195), Some(3476508539423528L), Some(RedisGeoAsyncCommands.GeoCoordinates(15.087267458438873, 37.08727071557567))))
+            _ <- roundWithin(radiusResultsWitData(1)) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Palermo", Some(190.4424), Some(3479099956230698L), Some(RedisGeoAsyncCommands.GeoCoordinates(13.361389338970184, 38.1155563954963))))
+            radiusResultsWithStore <- client.geoRadius(
+              key, 15, 37, 200, RedisGeoAsyncCommands.GeoUnit.Kilometers, RedisGeoAsyncCommands.GeoRadiusStoreArgs(destKey)
+            )
+            _ <- radiusResultsWithStore shouldBe 2L
+            radiusResultsWithStoreAndCount <- client.geoRadius(
+              key, 15, 37, 200, RedisGeoAsyncCommands.GeoUnit.Kilometers, RedisGeoAsyncCommands.GeoRadiusStoreArgs(destKey, count = Some(1))
+            )
+            _ <- radiusResultsWithStoreAndCount shouldBe 1L
+            radiusByMember <- client.geoRadiusByMember(key, "Palermo", 200, RedisGeoAsyncCommands.GeoUnit.Kilometers)
+            _ <- radiusByMember shouldBe Set("Palermo", "Catania")
+            radiusByMemberWithArgs <- client.geoRadiusByMember(
+              key, "Palermo", 200, RedisGeoAsyncCommands.GeoUnit.Kilometers, RedisGeoAsyncCommands.GeoArgs(
+              withDistance = true, withHash = true, withCoordinates = true, count = Some(2), any = true, sort = Some(RedisGeoAsyncCommands.GeoArgs.Sort.Asc)
+            ))
+            _ <- radiusByMemberWithArgs.size shouldBe 2
+            _ <- roundWithin(radiusByMemberWithArgs.head) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Palermo", Some(0.0), Some(3479099956230698L), Some(RedisGeoAsyncCommands.GeoCoordinates(13.361389338970184, 38.1155563954963))))
+            _ <- roundWithin(radiusByMemberWithArgs(1)) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Catania", Some(190.2873), Some(3476508539423528L), Some(RedisGeoAsyncCommands.GeoCoordinates(15.087267458438873, 37.08727071557567))))
+            geoSearchResults <- client.geoSearch(key, RedisGeoAsyncCommands.GeoReference.FromMember("Palermo"), RedisGeoAsyncCommands.GeoPredicate.Radius(200, RedisGeoAsyncCommands.GeoUnit.Kilometers))
+            _ <- geoSearchResults shouldBe Set("Palermo", "Catania")
+            geoSearchResultsWithArgs <- client.geoSearch(
+              key, RedisGeoAsyncCommands.GeoReference.FromMember("Palermo"), RedisGeoAsyncCommands.GeoPredicate.Radius(200, RedisGeoAsyncCommands.GeoUnit.Kilometers), RedisGeoAsyncCommands.GeoArgs(
+              withDistance = true, withHash = true, withCoordinates = true, count = Some(2), any = true, sort = Some(RedisGeoAsyncCommands.GeoArgs.Sort.Asc)
+            ))
+            _ <- geoSearchResultsWithArgs.size shouldBe 2
+            _ <- roundWithin(geoSearchResultsWithArgs.head) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Palermo", Some(0.0), Some(3479099956230698L), Some(RedisGeoAsyncCommands.GeoCoordinates(13.361389338970184, 38.1155563954963))))
+            _ <- roundWithin(geoSearchResultsWithArgs(1)) shouldBe roundWithin(RedisGeoAsyncCommands.GeoWithin("Catania", Some(190.2873), Some(3476508539423528L), Some(RedisGeoAsyncCommands.GeoCoordinates(15.087267458438873, 37.08727071557567))))
+            geoSearchResultsWithStore <- client.geoSearchStore(
+              destKey, key, RedisGeoAsyncCommands.GeoReference.FromMember("Palermo"), RedisGeoAsyncCommands.GeoPredicate.Radius(200, RedisGeoAsyncCommands.GeoUnit.Kilometers), RedisGeoAsyncCommands.GeoArgs(
+                count = Some(2)
+              ))
+            _ <- geoSearchResultsWithStore shouldBe 2L
           } yield succeed
         }
       }
