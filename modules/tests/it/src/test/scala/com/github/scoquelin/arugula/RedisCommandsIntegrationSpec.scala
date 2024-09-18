@@ -11,7 +11,7 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 
 import com.github.scoquelin.arugula.commands.RedisBaseAsyncCommands.InitialCursor
 import com.github.scoquelin.arugula.commands.RedisGeoAsyncCommands.{GeoCoordinates, GeoWithin}
-import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisGeoAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisScriptingAsyncCommands, RedisServerAsyncCommands}
+import com.github.scoquelin.arugula.commands.{RedisBaseAsyncCommands, RedisGeoAsyncCommands, RedisKeyAsyncCommands, RedisListAsyncCommands, RedisScriptingAsyncCommands, RedisServerAsyncCommands, RedisStreamAsyncCommands}
 import com.github.scoquelin.arugula.commands.RedisStringAsyncCommands.{BitFieldCommand, BitFieldDataType}
 import io.lettuce.core.{RedisCommandExecutionException, RedisCommandInterruptedException}
 
@@ -1425,6 +1425,61 @@ class RedisCommandsIntegrationSpec extends BaseRedisCommandsIntegrationSpec with
             _ <- client.scriptKill.failed.map(_ shouldBe a[RedisCommandExecutionException])
             readOnlyResult <- client.evalReadOnly("return redis.call('get', KEYS[1])", RedisScriptingAsyncCommands.ScriptOutputType.Value, List(key))
             _ <- readOnlyResult shouldBe "value"
+          } yield succeed
+        }
+      }
+    }
+
+    "leveraging RedisStreamingAsyncCommands" should {
+      "allow various streaming commands" in {
+        withRedisSingleNode(RedisCodec.Utf8WithValueAsStringCodec) { client =>
+          val key = randomKey("stream-key")
+          val group = randomKey("group")
+          val consumer = randomKey("consumer")
+          val entries = Map("field1" -> "value1", "field2" -> "value2", "field3" -> "value3")
+          for {
+            messageId <- client.xAdd(key, entries)
+            results <- client.xRange(key, RedisStreamAsyncCommands.XRange.unbounded)
+            _ <- results.size shouldBe 1
+            _ <- results.head.id shouldBe messageId
+            _ <- results.head.entries shouldBe entries
+            dateRangeResults <- client.xRange(key, RedisStreamAsyncCommands.XRange.fromLower(java.time.Instant.now().minusSeconds(10)))
+            _ <- dateRangeResults.size shouldBe 1
+            _ <- dateRangeResults.head.id.nonEmpty shouldBe true
+            _ <- dateRangeResults.head.entries shouldBe entries
+            revRangeResults <- client.xRevRange(key, RedisStreamAsyncCommands.XRange.unbounded)
+            _ <- revRangeResults.size shouldBe 1
+            _ <- revRangeResults.head.id shouldBe messageId
+            _ <- revRangeResults.head.entries shouldBe entries
+            readResults <- client.xRead(RedisStreamAsyncCommands.StreamOffset.earliest(key))
+            _ <- readResults.size shouldBe 1
+            _ <- readResults.head.id shouldBe messageId
+            _ <- readResults.head.entries shouldBe entries
+            readResultsWithArgs <- client.xRead(List(RedisStreamAsyncCommands.StreamOffset.earliest(key), RedisStreamAsyncCommands.StreamOffset.earliest(key)), count = Some(2L), block = Some(1000.milliseconds))
+            _ <- readResultsWithArgs.size shouldBe 2
+            _ <- readResultsWithArgs.head.id shouldBe messageId
+            _ <- readResultsWithArgs.head.entries shouldBe entries
+            _ <- client.xGroupCreate(RedisStreamAsyncCommands.StreamOffset.earliest(key), group)
+            _ <- client.xGroupSetId(RedisStreamAsyncCommands.StreamOffset.earliest(key), group)
+            _ <- client.xGroupCreateConsumer(key, group, consumer)
+            groupReadResults <- client.xReadGroup(group, consumer, List(RedisStreamAsyncCommands.StreamOffset.earliest(key)), count = Some(2L), block = Some(1000.milliseconds))
+            _ <- groupReadResults.size shouldBe 0
+            pendingResults <- client.xPending(key, group)
+            _ <- pendingResults shouldBe RedisStreamAsyncCommands.PendingMessages(0, RedisStreamAsyncCommands.XRange.unbounded)
+            autoClaimResults <- client.xAutoClaim(key, group, consumer, 1.hour, messageId)
+            _ <- autoClaimResults.id shouldBe "0-0"
+            _ <- autoClaimResults.messages.isEmpty shouldBe true
+            claimResults <- client.xClaim(key, group, consumer, 1.hour, List(messageId))
+            _ <- claimResults.isEmpty shouldBe true
+            _ <- client.xAck(key, group, messageId)
+            _ <- client.xGroupDelConsumer(key, group, consumer)
+            _ <- client.xGroupDestroy(key, group)
+            _ <- client.xGroupCreate(RedisStreamAsyncCommands.StreamOffset.earliest(key), group)
+            _ <- client.xGroupCreateConsumer(key, group, consumer)
+            _ <- client.xGroupDelConsumer(key, group, consumer)
+            _ <- client.xGroupDestroy(key, group)
+            _ <- client.xDel(key, messageId)
+            _ <- client.xTrim(key, 0)
           } yield succeed
         }
       }
